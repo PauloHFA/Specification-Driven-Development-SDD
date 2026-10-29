@@ -177,7 +177,9 @@ class VaultApp {
           this.physics.step(dt);
           const positions = this.physics.getNodePositions();
           this.vault3D.updateNodePositions(positions);
-          this.statEnergy.textContent = `Ek: ${this.physics.getSimulationEnergy().toFixed(2)}`;
+          const energy = this.physics.getSimulationEnergy();
+          const energyText = (energy && typeof energy.kinetic === 'number') ? energy.kinetic.toFixed(2) : (typeof energy === 'number' ? energy.toFixed(2) : '0.00');
+          this.statEnergy.textContent = `Ek: ${energyText}`;
         } else {
           this.statEnergy.textContent = '💤 Em Repouso';
         }
@@ -275,15 +277,33 @@ class VaultApp {
   }
 
   handleSearch(query) {
-    if (!this.currentGraph || !query) return;
-    const q = query.toLowerCase();
+    if (!this.currentGraph) return;
+    const q = (query || '').toLowerCase().trim();
+
+    const matchingNodeIds = new Set();
     for (const node of this.currentGraph.nodes) {
       const mesh = this.vault3D.nodeMeshMap.get(node.id);
       const label = this.vault3D.nodeLabelMap.get(node.id);
+      const matches = !q || node.id.toLowerCase().includes(q) || (node.title && node.title.toLowerCase().includes(q));
+      if (matches) {
+        matchingNodeIds.add(node.id);
+      }
       if (mesh && label) {
-        const matches = node.id.toLowerCase().includes(q) || (node.title && node.title.toLowerCase().includes(q));
         mesh.material.opacity = matches ? 1.0 : 0.2;
         label.material.opacity = matches ? 1.0 : 0.2;
+      }
+    }
+
+    if (this.vault3D.edgeObjectList) {
+      for (const item of this.vault3D.edgeObjectList) {
+        if (!item.line || !item.line.material) continue;
+        const defaultOpacity = item.isCircular ? 1.0 : 0.65;
+        if (!q) {
+          item.line.material.opacity = defaultOpacity;
+        } else {
+          const edgeMatches = matchingNodeIds.has(item.edge.source) && matchingNodeIds.has(item.edge.target);
+          item.line.material.opacity = edgeMatches ? defaultOpacity : 0.1;
+        }
       }
     }
   }

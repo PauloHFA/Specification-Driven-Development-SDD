@@ -932,7 +932,7 @@ function cmdLicoes(config, positional, flags) {
 }
 
 export async function cmdVault(flags = {}, positional = []) {
-  const port = flags.port ? parseInt(flags.port, 10) : 3333;
+  const port = (flags.port !== undefined && flags.port !== null && flags.port !== '') ? parseInt(flags.port, 10) : 3333;
   const host = flags.host || '127.0.0.1';
   const open = Boolean(flags.open);
   const specDir = positional[0] || flags.spec;
