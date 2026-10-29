@@ -686,63 +686,67 @@ export function loadSDDGraph(specDir, options = {}) {
     fallbackToExamples: options.fallbackToExamples !== false
   });
 
+  function buildSyntheticFallback() {
+    const scenarioName = options.syntheticScenario || 'clean_dag';
+    const scenario = getSyntheticScenario(scenarioName);
+    const cycleResult = detectCycles(scenario.nodes, scenario.edges);
+
+    for (const node of scenario.nodes) {
+      const s = cycleResult.nodeStatusMap.get(node.id);
+      if (s === NodeStatus.CIRCULAR) {
+        node.setStatus(NodeStatus.CIRCULAR);
+      } else if (s === NodeStatus.ORPHAN) {
+        node.addTag(IntegrityTag.ORPHAN_NODE);
+      } else if (s === NodeStatus.BROKEN) {
+        node.addTag(IntegrityTag.BROKEN_REFERENCE);
+      }
+    }
+    for (const edge of scenario.edges) {
+      const eid = edge.id || `${edge.source}->${edge.target}`;
+      const s = cycleResult.edgeStatusMap.get(eid);
+      if (s) edge.setStatus(s);
+    }
+
+    const stats = {
+      nodeCount: scenario.nodes.length,
+      edgeCount: scenario.edges.length,
+      featureCount: scenario.nodes.filter(n => n.type === NodeType.FEATURE).length,
+      storyCount: scenario.nodes.filter(n => n.type === NodeType.STORY).length,
+      criterionCount: scenario.nodes.filter(n => n.type === NodeType.CRITERION).length,
+      taskCount: scenario.nodes.filter(n => n.type === NodeType.TASK).length,
+      principleCount: scenario.nodes.filter(n => n.type === NodeType.PRINCIPLE).length,
+      assumptionCount: scenario.nodes.filter(n => n.type === NodeType.ASSUMPTION).length,
+      questionCount: scenario.nodes.filter(n => n.type === NodeType.QUESTION).length,
+      fileCount: scenario.nodes.filter(n => n.type === NodeType.FILE).length,
+      hasCycles: cycleResult.hasCycles,
+      cycleCount: cycleResult.cycleCount,
+      cycles: cycleResult.cycles,
+      orphanCount: cycleResult.orphanNodeIds.size,
+      brokenEdgeCount: cycleResult.brokenEdges.length
+    };
+
+    const metadata = {
+      loadedAt: new Date().toISOString(),
+      source: 'synthetic_fallback',
+      scenario: scenario.name,
+      description: scenario.description,
+      specDir: null,
+      projectRoot,
+      cycleSummary: cycleResult.summary,
+      sccs: cycleResult.sccs
+    };
+
+    return {
+      nodes: scenario.nodes,
+      edges: scenario.edges,
+      metadata,
+      stats
+    };
+  }
+
   if (!resolved) {
     if (options.fallbackToSynthetic !== false) {
-      const scenarioName = options.syntheticScenario || 'clean_dag';
-      const scenario = getSyntheticScenario(scenarioName);
-      const cycleResult = detectCycles(scenario.nodes, scenario.edges);
-
-      for (const node of scenario.nodes) {
-        const s = cycleResult.nodeStatusMap.get(node.id);
-        if (s === NodeStatus.CIRCULAR) {
-          node.setStatus(NodeStatus.CIRCULAR);
-        } else if (s === NodeStatus.ORPHAN) {
-          node.addTag(IntegrityTag.ORPHAN_NODE);
-        } else if (s === NodeStatus.BROKEN) {
-          node.addTag(IntegrityTag.BROKEN_REFERENCE);
-        }
-      }
-      for (const edge of scenario.edges) {
-        const eid = edge.id || `${edge.source}->${edge.target}`;
-        const s = cycleResult.edgeStatusMap.get(eid);
-        if (s) edge.setStatus(s);
-      }
-
-      const stats = {
-        nodeCount: scenario.nodes.length,
-        edgeCount: scenario.edges.length,
-        featureCount: scenario.nodes.filter(n => n.type === NodeType.FEATURE).length,
-        storyCount: scenario.nodes.filter(n => n.type === NodeType.STORY).length,
-        criterionCount: scenario.nodes.filter(n => n.type === NodeType.CRITERION).length,
-        taskCount: scenario.nodes.filter(n => n.type === NodeType.TASK).length,
-        principleCount: scenario.nodes.filter(n => n.type === NodeType.PRINCIPLE).length,
-        assumptionCount: scenario.nodes.filter(n => n.type === NodeType.ASSUMPTION).length,
-        questionCount: scenario.nodes.filter(n => n.type === NodeType.QUESTION).length,
-        fileCount: scenario.nodes.filter(n => n.type === NodeType.FILE).length,
-        hasCycles: cycleResult.hasCycles,
-        cycleCount: cycleResult.cycleCount,
-        cycles: cycleResult.cycles,
-        orphanCount: cycleResult.orphanNodeIds.size,
-        brokenEdgeCount: cycleResult.brokenEdges.length
-      };
-
-      const metadata = {
-        loadedAt: new Date().toISOString(),
-        source: 'synthetic_fallback',
-        scenario: scenario.name,
-        description: scenario.description,
-        specDir: null,
-        projectRoot,
-        cycleSummary: cycleResult.summary,
-        sccs: cycleResult.sccs
-      };
-
-      return {
-        nodes: scenario.nodes,
-        edges: scenario.edges,
-        metadata,
-        stats
-      };
+      return buildSyntheticFallback();
     }
 
     throw new Error(
