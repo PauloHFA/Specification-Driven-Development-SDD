@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cofre 3D de Documentação & Diagramas — Spatial Knowledge Graph</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- Top HUD Toolbar -->
+    <header id="top-toolbar">
+      <div class="toolbar-brand">
+        <span class="brand-icon">🔮</span>
+        <div class="brand-text">
+          <h1>Cofre 3D</h1>
+          <span class="brand-subtitle">Spatial Knowledge Graph</span>
+        </div>
+      </div>
+
+      <div class="toolbar-controls">
+        <div class="control-group">
+          <label for="scenario-select">Cenário:</label>
+          <select id="scenario-select" title="Alternar entre repositório ao vivo e cenários de teste controlados">
+            <option value="live_sdd">Repositório SDD (.spec/)</option>
+            <option value="clean_dag">1. Clean DAG (Válido)</option>
+            <option value="simple_cycle">2. Simple Cycle (A→B→C→A)</option>
+            <option value="multi_cycle_figure8">3. Multi-Cycle Figure-8</option>
+            <option value="disjoint_hybrid">4. Disjoint Hybrid</option>
+            <option value="adversarial_drift">5. Adversarial Drift</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <button id="btn-toggle-physics" class="btn btn-secondary" title="Pausar ou retomar simulação de física elástica">
+            <span class="btn-icon">⏸</span> <span class="btn-text">Pausar Física</span>
+          </button>
+          <button id="btn-reset-view" class="btn btn-secondary" title="Redefinir câmera para visualização global">
+            <span class="btn-icon">🎯</span> <span class="btn-text">Centralizar</span>
+          </button>
+        </div>
+
+        <div class="control-group search-group">
+          <input type="text" id="input-search" placeholder="Buscar nó (ex: US-001, AC...)..." autocomplete="off">
+        </div>
+      </div>
+
+      <div class="toolbar-status">
+        <div id="integrity-badge" class="badge badge-clean">
+          <span class="status-dot"></span>
+          <span id="integrity-text">Verificando...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 3D Canvas Viewport -->
+    <main id="viewport-container">
+      <canvas id="vault-canvas"></canvas>
+
+      <!-- Bottom Floating Legend -->
+      <div id="legend-panel" class="floating-panel">
+        <div class="legend-header">Legenda de Tipos</div>
+        <div class="legend-grid">
+          <div class="legend-item"><span class="color-dot type-feature"></span> Feature</div>
+          <div class="legend-item"><span class="color-dot type-story"></span> História (US)</div>
+          <div class="legend-item"><span class="color-dot type-criterion"></span> Critério (AC)</div>
+          <div class="legend-item"><span class="color-dot type-task"></span> Tarefa (T)</div>
+          <div class="legend-item"><span class="color-dot type-principle"></span> Princípio</div>
+          <div class="legend-item"><span class="color-dot type-file"></span> Arquivo/Código</div>
+          <div class="legend-item"><span class="color-dot status-circular"></span> Ciclo / Erro</div>
+        </div>
+      </div>
+
+      <!-- Controls Guidance -->
+      <div id="guidance-panel" class="floating-panel">
+        <div class="guidance-row"><span>Arrastar (Esq.):</span> Orbitar</div>
+        <div class="guidance-row"><span>Arrastar (Dir.):</span> Pan</div>
+        <div class="guidance-row"><span>Roda Mouse:</span> Zoom</div>
+        <div class="guidance-row"><span>Clique no Nó:</span> Focar & Lerp</div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div id="stats-panel" class="floating-panel">
+        <span id="stat-nodes">0 nós</span> &bull;
+        <span id="stat-edges">0 arestas</span> &bull;
+        <span id="stat-energy">Física Ativa</span>
+      </div>
+    </main>
+
+    <!-- Slide-Out Side Inspection HUD -->
+    <aside id="inspector-hud" class="hud-drawer closed">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <span id="hud-type-badge" class="badge">TIPO</span>
+          <span id="hud-status-badge" class="badge">STATUS</span>
+          <h2 id="hud-node-id">ID</h2>
+        </div>
+        <button id="btn-close-hud" class="btn-icon-close" title="Fechar painel">&times;</button>
+      </div>
+
+      <div class="drawer-content">
+        <div class="drawer-section">
+          <label>Título / Descrição</label>
+          <div id="hud-title" class="hud-field-value title-val">---</div>
+          <p id="hud-snippet" class="hud-field-value snippet-val">---</p>
+        </div>
+
+        <div id="section-gwt" class="drawer-section hidden">
+          <label>Critérios de Aceite (Given / When / Then)</label>
+          <div id="hud-gwt-content" class="hud-field-value gwt-val"></div>
+        </div>
+
+        <div id="section-files" class="drawer-section hidden">
+          <label>Arquivos Relacionados</label>
+          <ul id="hud-files-list" class="hud-list"></ul>
+        </div>
+
+        <div id="section-integrity" class="drawer-section alert-section hidden">
+          <label>Auditoria de Integridade & Ciclo</label>
+          <div id="hud-integrity-warning" class="integrity-warning-box"></div>
+        </div>
+
+        <div class="drawer-section">
+          <label>Conexões Conectadas</label>
+          <div class="relations-container">
+            <div>
+              <span class="relation-subhead">Entrada:</span>
+              <ul id="hud-incoming-list" class="hud-list"></ul>
+            </div>
+            <div>
+              <span class="relation-subhead">Saída:</span>
+              <ul id="hud-outgoing-list" class="hud-list"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

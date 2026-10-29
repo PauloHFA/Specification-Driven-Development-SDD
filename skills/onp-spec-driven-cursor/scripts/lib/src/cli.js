@@ -161,6 +161,9 @@ comandos:
                       lições aprendidas COM LASTRO: só entra lição ancorada em
                       sinal real do audit/verify; promoção mecânica ao recorrer
                       em features distintas (detalhes: onp-spec licoes)
+  vault [--port 3333] [--open] [--spec <dir>]
+                      inicia o Cofre 3D de Documentação & Diagramas
+                      no navegador com física elástica e detecção de ciclos
   help                esta ajuda
 
 fluxo típico:
@@ -928,6 +931,45 @@ function cmdLicoes(config, positional, flags) {
   return 2;
 }
 
+export async function cmdVault(flags = {}, positional = []) {
+  const port = flags.port ? parseInt(flags.port, 10) : 3333;
+  const host = flags.host || '127.0.0.1';
+  const open = Boolean(flags.open);
+  const specDir = positional[0] || flags.spec;
+  const quiet = Boolean(flags.test || flags.quiet);
+
+  const { startVaultServer } = await import('./vault/server.js');
+  const instance = await startVaultServer({
+    port,
+    host,
+    open,
+    specDir,
+    quiet,
+    projectRoot: process.cwd()
+  });
+
+  if (!quiet) {
+    console.log(`\n🔮 Cofre 3D de Documentação & Diagramas ativo!`);
+    console.log(`   URL: ${instance.url}`);
+    console.log(`   Pressione Ctrl+C para encerrar.\n`);
+  }
+
+  if (flags['no-wait'] || flags.test) {
+    return instance;
+  }
+
+  return new Promise((resolve) => {
+    const handleSigint = () => {
+      console.log('\nEncerrando servidor do Cofre 3D...');
+      instance.close().then(() => {
+        process.removeListener('SIGINT', handleSigint);
+        resolve(0);
+      });
+    };
+    process.on('SIGINT', handleSigint);
+  });
+}
+
 export async function run(argv) {
   const [command, ...rest] = argv;
   const { flags, positional } = parseFlags(rest);
@@ -951,6 +993,7 @@ export async function run(argv) {
 
   if (command === 'init') return cmdInit(rootDir, flags);
   if (command === 'new') return cmdNew(rootDir, positional[0], flags);
+  if (command === 'vault') return cmdVault(flags, positional);
 
   const config = loadConfig(rootDir);
 

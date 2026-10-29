@@ -5,7 +5,7 @@ import { run } from '../src/cli.js';
 // Com process.exit(), saídas grandes (audit --json) eram truncadas em ~8KB.
 run(process.argv.slice(2)).then(
   (code) => {
-    process.exitCode = code;
+    process.exitCode = typeof code === 'number' ? code : 0;
   },
   (err) => {
     console.error(`erro: ${err.message}`);
