@@ -1,10 +1,10 @@
 # Progress
 
 ## Current Status
-Last visited: 2026-10-29T16:52:45Z
+Last visited: 2026-10-29T16:58:30Z
 
 ## Iteration Status
-Current iteration: 4 / 32
+Current iteration: 5 / 32
 
 - [x] Initialized orchestrator state (DISPATCH.md, BRIEFING.md, progress.md)
 - [x] Phase 0: Dispatched & collected Survey reports (Explorer 1, Spec Miner 1, Explorer 2)
@@ -19,6 +19,7 @@ Current iteration: 4 / 32
 - [x] Phase 9: Final Milestone Verification Loop:
   - final_challenger_1: APPROVE (163/163 tests pass, 26 adversarial challenges verified)
   - final_auditor_1: CLEAN (zero integrity violations, zero facades, zero external dependencies)
-  - final_reviewer_1: REQUEST_CHANGES (minor browser client energy formatting fix)
-- [ ] Phase 10: Final Polish & Project Sign-Off:
-  - final_polish_worker (bfa7f6ec-178f-4650-96ae-234be424223f): [in-progress - applying client formatting fix and syncing skills]
+  - final_reviewer_1: REQUEST_CHANGES (browser client energy formatting fix & opacity reset)
+  - final_polish_worker: COMPLETED (fixed app.js:180, app.js:278, cli.js:935, synced 4 skills, 163/163 vault tests + 21/21 skill tests pass)
+- [ ] Phase 10: Final Acceptance Verification & Gate Closure:
+  - final_reviewer_2 (d9db5fe8-c26c-481b-8439-50151917dcd4): [in-progress - verifying fixes, full test suite & R1-R4 compliance]
