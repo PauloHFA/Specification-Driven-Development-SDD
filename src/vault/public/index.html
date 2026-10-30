@@ -33,6 +33,9 @@
         </div>
 
         <div class="control-group">
+          <button id="btn-add-node" class="btn btn-primary" title="Adicionar nova nota, componente ou critério ao painel 3D">
+            <span class="btn-icon">➕</span> <span class="btn-text">Novo Nó</span>
+          </button>
           <button id="btn-toggle-physics" class="btn btn-secondary" title="Pausar ou retomar simulação de física elástica">
             <span class="btn-icon">⏸</span> <span class="btn-text">Pausar Física</span>
           </button>
@@ -122,6 +125,13 @@
         </div>
 
         <div class="drawer-section">
+          <label>Ações do Nó</label>
+          <button id="btn-hud-connect" class="btn btn-secondary btn-full" title="Conectar este nó a outro elemento do grafo">
+            🔗 Conectar a Outro Nó
+          </button>
+        </div>
+
+        <div class="drawer-section">
           <label>Conexões Conectadas</label>
           <div class="relations-container">
             <div>
@@ -136,6 +146,58 @@
         </div>
       </div>
     </aside>
+
+    <!-- Modal: Adicionar Novo Nó / Componente -->
+    <div id="modal-add-node" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>➕ Adicionar Novo Nó ao Painel 3D</h3>
+          <button id="btn-modal-close" class="btn-icon-close" title="Fechar">&times;</button>
+        </div>
+        <form id="form-add-node" class="modal-body">
+          <div class="form-group">
+            <label for="new-node-id">Identificador Único (ID):</label>
+            <input type="text" id="new-node-id" required placeholder="Ex: US-003, FEAT:pagamento, NOTA-1" autocomplete="off">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="new-node-type">Tipo de Componente:</label>
+              <select id="new-node-type">
+                <option value="story">História de Usuário (US)</option>
+                <option value="feature">Feature (Funcionalidade)</option>
+                <option value="criterion">Critério de Aceite (AC)</option>
+                <option value="task">Tarefa Técnica (T)</option>
+                <option value="principle">Princípio / Regra (P)</option>
+                <option value="file">Arquivo / Código (FILE)</option>
+                <option value="generic">Nota Geral</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label for="new-node-target">Conectar a (Opcional):</label>
+              <select id="new-node-target">
+                <option value="">(Nenhum - nó independente)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-node-title">Título / Nome:</label>
+            <input type="text" id="new-node-title" required placeholder="Ex: Integração com Gateway de Pagamento" autocomplete="off">
+          </div>
+
+          <div class="form-group">
+            <label for="new-node-snippet">Descrição / GWT / Detalhes:</label>
+            <textarea id="new-node-snippet" rows="3" placeholder="Ex: Dado que o cliente possui saldo... Quando solicitar o PIX... Então gerar o QR Code..."></textarea>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="btn-modal-cancel" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Adicionar ao Grafo 3D 🚀</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./app.js"></script>

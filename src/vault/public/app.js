@@ -47,7 +47,21 @@ class VaultApp {
     this.hudIntegrityWarning = document.getElementById('hud-integrity-warning');
     this.hudIncomingList = document.getElementById('hud-incoming-list');
     this.hudOutgoingList = document.getElementById('hud-outgoing-list');
+    this.btnHudConnect = document.getElementById('btn-hud-connect');
 
+    // Creation Modal Elements
+    this.btnAddNode = document.getElementById('btn-add-node');
+    this.modalAddNode = document.getElementById('modal-add-node');
+    this.btnModalClose = document.getElementById('btn-modal-close');
+    this.btnModalCancel = document.getElementById('btn-modal-cancel');
+    this.formAddNode = document.getElementById('form-add-node');
+    this.newNodeId = document.getElementById('new-node-id');
+    this.newNodeType = document.getElementById('new-node-type');
+    this.newNodeTarget = document.getElementById('new-node-target');
+    this.newNodeTitle = document.getElementById('new-node-title');
+    this.newNodeSnippet = document.getElementById('new-node-snippet');
+
+    this.inspectedNode = null;
     this._lastPhysicsTime = performance.now();
   }
 
@@ -106,11 +120,201 @@ class VaultApp {
       this.closeInspector();
     });
 
+    // Node Creation Modal
+    if (this.btnAddNode) {
+      this.btnAddNode.addEventListener('click', () => this.openAddNodeModal());
+    }
+    if (this.btnModalClose) {
+      this.btnModalClose.addEventListener('click', () => this.closeAddNodeModal());
+    }
+    if (this.btnModalCancel) {
+      this.btnModalCancel.addEventListener('click', () => this.closeAddNodeModal());
+    }
+    if (this.formAddNode) {
+      this.formAddNode.addEventListener('submit', (e) => this.handleAddNodeSubmit(e));
+    }
+    if (this.btnHudConnect) {
+      this.btnHudConnect.addEventListener('click', () => this.handleConnectFromHud());
+    }
+
     this.vault3D.onNodeClickCallback = (nodeData) => {
       if (nodeData) {
         this.openInspector(nodeData);
       }
     };
+  }
+
+  openAddNodeModal() {
+    if (!this.currentGraph) return;
+
+    // Populate connect target dropdown with existing nodes
+    this.newNodeTarget.innerHTML = '<option value="">(Nenhum - nó independente)</option>';
+    for (const n of this.currentGraph.nodes) {
+      const opt = document.createElement('option');
+      opt.value = n.id;
+      opt.textContent = `${n.id} — ${n.title ? n.title.slice(0, 30) : n.type}`;
+      this.newNodeTarget.appendChild(opt);
+    }
+
+    // Default suggestion for ID
+    const nextIdx = (this.currentGraph.nodes.length || 0) + 1;
+    this.newNodeId.value = `NOTA-${nextIdx}`;
+    this.newNodeTitle.value = '';
+    this.newNodeSnippet.value = '';
+
+    this.modalAddNode.classList.remove('hidden');
+    this.newNodeTitle.focus();
+  }
+
+  closeAddNodeModal() {
+    this.modalAddNode.classList.add('hidden');
+  }
+
+  handleAddNodeSubmit(e) {
+    e.preventDefault();
+    if (!this.currentGraph) return;
+
+    const id = this.newNodeId.value.trim();
+    const title = this.newNodeTitle.value.trim();
+    const type = this.newNodeType.value || 'story';
+    const snippet = this.newNodeSnippet.value.trim() || `Nota criada interativamente no Cofre 3D: ${title}`;
+    const targetId = this.newNodeTarget.value;
+
+    if (!id || !title) return;
+
+    // Check duplicate ID
+    if (this.currentGraph.nodes.some(n => n.id === id)) {
+      alert(`O ID "${id}" já existe no grafo. Por favor escolha um identificador único.`);
+      return;
+    }
+
+    // Reference position near target node if connected, or near origin
+    let initialPos = {
+      x: (Math.random() - 0.5) * 80,
+      y: (Math.random() - 0.5) * 80,
+      z: (Math.random() - 0.5) * 50
+    };
+    if (targetId) {
+      const parentMesh = this.vault3D.nodeMeshMap.get(targetId);
+      if (parentMesh) {
+        initialPos = {
+          x: parentMesh.position.x + (Math.random() - 0.5) * 60,
+          y: parentMesh.position.y + (Math.random() - 0.5) * 60,
+          z: parentMesh.position.z + (Math.random() - 0.5) * 40
+        };
+      }
+    }
+
+    const newNode = {
+      id,
+      title,
+      type,
+      status: 'valid',
+      snippet,
+      position: initialPos,
+      velocity: { x: 0, y: 0, z: 0 },
+      mass: type === 'feature' ? 2.5 : type === 'story' ? 1.8 : 1.0,
+      tags: [],
+      auditFindings: [],
+      metadata: {}
+    };
+
+    this.currentGraph.nodes.push(newNode);
+    this.vault3D.addNode(newNode);
+
+    if (targetId) {
+      const newEdge = {
+        source: targetId,
+        target: id,
+        type: 'relates_to',
+        status: 'valid',
+        tags: []
+      };
+      this.currentGraph.edges.push(newEdge);
+      this.vault3D.addEdge(newEdge);
+    }
+
+    // Synchronize physics
+    this.syncPhysicsGraph();
+    this.updateIntegrityStatus(this.currentGraph);
+    this.closeAddNodeModal();
+
+    // Lerp camera and inspect
+    this.vault3D.focusNode(id);
+    this.openInspector(newNode);
+  }
+
+  handleConnectFromHud() {
+    if (!this.inspectedNode || !this.currentGraph) return;
+
+    const sourceId = this.inspectedNode.id;
+    const candidates = this.currentGraph.nodes.filter(n => n.id !== sourceId);
+    if (candidates.length === 0) {
+      alert('Não há outros nós disponíveis para conexão.');
+      return;
+    }
+
+    const targetList = candidates.map((n, i) => `${i + 1}. ${n.id} (${n.title || n.type})`).join('\n');
+    const chosen = prompt(`Conectar "${sourceId}" a qual nó?\n\nDigite o ID exato ou o número da lista:\n\n${targetList}`);
+    if (!chosen) return;
+
+    let targetNode = candidates.find(n => n.id.toLowerCase() === chosen.trim().toLowerCase());
+    if (!targetNode) {
+      const idx = parseInt(chosen.trim(), 10) - 1;
+      if (!isNaN(idx) && candidates[idx]) {
+        targetNode = candidates[idx];
+      }
+    }
+
+    if (!targetNode) {
+      alert(`Nó "${chosen}" não encontrado.`);
+      return;
+    }
+
+    // Avoid duplicate edges
+    const exists = this.currentGraph.edges.some(e =>
+      (e.source === sourceId && e.target === targetNode.id) ||
+      (e.source === targetNode.id && e.target === sourceId)
+    );
+    if (exists) {
+      alert(`Já existe uma conexão entre "${sourceId}" e "${targetNode.id}".`);
+      return;
+    }
+
+    const newEdge = {
+      source: sourceId,
+      target: targetNode.id,
+      type: 'relates_to',
+      status: 'valid',
+      tags: []
+    };
+
+    this.currentGraph.edges.push(newEdge);
+    this.vault3D.addEdge(newEdge);
+    this.syncPhysicsGraph();
+    this.updateIntegrityStatus(this.currentGraph);
+    this.openInspector(this.inspectedNode);
+  }
+
+  syncPhysicsGraph() {
+    if (this.physics) {
+      const curPositions = this.physics.getNodePositions();
+      for (const node of this.currentGraph.nodes) {
+        if (curPositions.has(node.id)) {
+          const p = curPositions.get(node.id);
+          node.position = { x: p.x, y: p.y, z: p.z };
+        }
+      }
+    }
+
+    this.physics = new SpringSimulation(this.currentGraph, {
+      kRepulsion: 3500.0,
+      softening: 25.0,
+      kSpring: 0.22,
+      dampingRatio: 0.88,
+      restLength: 75.0,
+      velocityDamping: 0.15
+    });
   }
 
   async loadScenario(scenarioName) {
@@ -137,6 +341,7 @@ class VaultApp {
       });
 
       this.vault3D.loadGraph(data);
+      this.vault3D._onResize();
       this.updateIntegrityStatus(data);
       this.closeInspector();
     } catch (err) {
@@ -192,6 +397,7 @@ class VaultApp {
 
   openInspector(node) {
     if (!node) return;
+    this.inspectedNode = node;
 
     this.hudNodeId.textContent = node.id;
     this.hudTypeBadge.textContent = node.type || 'NÓ';

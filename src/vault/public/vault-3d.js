@@ -133,12 +133,25 @@ export class Vault3D {
     this._boundOnResize = this._onResize.bind(this);
   }
 
+  _getContainerDimensions() {
+    const parent = this.canvas.parentElement || document.body;
+    const rect = parent.getBoundingClientRect();
+    const w = Math.floor(rect.width) || window.innerWidth || 800;
+    const h = Math.floor(rect.height) || window.innerHeight || 600;
+    return { width: Math.max(w, 320), height: Math.max(h, 240) };
+  }
+
   init() {
+    const dims = this._getContainerDimensions();
+    this.width = dims.width;
+    this.height = dims.height;
+
     this.scene = new Scene();
     this.scene.background = new Color(0x070b14);
 
     this.camera = new PerspectiveCamera(50, this.width / this.height, 1, 5000);
-    this.camera.position.set(0, 80, 360);
+    this.camera.position.set(0, 80, 380);
+    this.camera.lookAt(0, 0, 0);
 
     this.renderer = new WebGLRenderer({
       canvas: this.canvas,
@@ -146,24 +159,24 @@ export class Vault3D {
       alpha: true
     });
     this.renderer.setPixelRatio(window.devicePixelRatio || 1);
-    this.renderer.setSize(this.width, this.height);
+    this.renderer.setSize(this.width, this.height, false);
 
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.minDistance = 20;
-    this.controls.maxDistance = 2500;
+    this.controls.maxDistance = 3500;
 
     // Lighting
-    const ambientLight = new AmbientLight(0x475569, 1.2);
+    const ambientLight = new AmbientLight(0xffffff, 1.4);
     this.scene.add(ambientLight);
 
-    const dirLight1 = new DirectionalLight(0xffffff, 0.9);
+    const dirLight1 = new DirectionalLight(0xffffff, 1.0);
     dirLight1.position.set(200, 400, 300);
     this.scene.add(dirLight1);
 
-    const dirLight2 = new DirectionalLight(0x38bdf8, 0.4);
-    dirLight2.position.set(-200, -200, -100);
+    const dirLight2 = new DirectionalLight(0x38bdf8, 0.7);
+    dirLight2.position.set(-200, 200, 200);
     this.scene.add(dirLight2);
 
     this.scene.add(this.edgeGroup);
@@ -171,6 +184,9 @@ export class Vault3D {
 
     this.canvas.addEventListener('pointerdown', this._boundOnPointerDown);
     window.addEventListener('resize', this._boundOnResize);
+
+    // Initial resize sync after layout
+    setTimeout(() => this._onResize(), 50);
 
     requestAnimationFrame(this._boundAnimate);
   }
@@ -189,7 +205,7 @@ export class Vault3D {
 
     // 1. Build Node Meshes & Billboard Labels
     for (const node of nodes) {
-      const radius = node.type === 'feature' ? 8 : node.type === 'story' ? 6.5 : 5;
+      const radius = node.type === 'feature' ? 10 : node.type === 'story' ? 8 : 6.5;
       const isCircular = node.status === 'circular' || (node.tags && node.tags.includes('CIRCULAR_DEPENDENCY'));
 
       const nodeColorHex = isCircular ? COLOR_CYCLIC_NODE : (TYPE_COLORS[node.type] || TYPE_COLORS.generic);
@@ -197,12 +213,19 @@ export class Vault3D {
       const geometry = new SphereGeometry(radius, 16, 12);
       const material = new MeshPhongMaterial({
         color: nodeColorHex,
-        emissive: isCircular ? 0x991b1b : 0x1e293b,
-        shininess: 40
+        emissive: isCircular ? 0x991b1b : 0x223355,
+        shininess: 60
       });
 
       const mesh = new Mesh(geometry, material);
-      const pos = node.position || { x: (Math.random() - 0.5) * 200, y: (Math.random() - 0.5) * 200, z: (Math.random() - 0.5) * 100 };
+      const hasPos = node.position && (node.position.x !== 0 || node.position.y !== 0 || node.position.z !== 0);
+      const pos = hasPos
+        ? node.position
+        : {
+            x: (Math.random() - 0.5) * 200,
+            y: (Math.random() - 0.5) * 150,
+            z: (Math.random() - 0.5) * 80
+          };
       mesh.position.set(pos.x, pos.y, pos.z);
       mesh.userData = { nodeId: node.id, isCircular };
 
@@ -255,6 +278,77 @@ export class Vault3D {
     }
 
     this.resetView();
+  }
+
+  addNode(node) {
+    if (!node || !node.id) return;
+    this.nodeDataMap.set(node.id, node);
+
+    const radius = node.type === 'feature' ? 10 : node.type === 'story' ? 8 : 6.5;
+    const isCircular = node.status === 'circular' || (node.tags && node.tags.includes('CIRCULAR_DEPENDENCY'));
+    const nodeColorHex = isCircular ? COLOR_CYCLIC_NODE : (TYPE_COLORS[node.type] || TYPE_COLORS.generic);
+
+    const geometry = new SphereGeometry(radius, 16, 12);
+    const material = new MeshPhongMaterial({
+      color: nodeColorHex,
+      emissive: isCircular ? 0x991b1b : 0x223355,
+      shininess: 60
+    });
+
+    const mesh = new Mesh(geometry, material);
+    const pos = node.position || {
+      x: (Math.random() - 0.5) * 120,
+      y: (Math.random() - 0.5) * 100,
+      z: (Math.random() - 0.5) * 60
+    };
+    mesh.position.set(pos.x, pos.y, pos.z);
+    mesh.userData = { nodeId: node.id, isCircular };
+
+    this.nodeGroup.add(mesh);
+    this.nodeMeshMap.set(node.id, mesh);
+
+    const labelText = node.id;
+    const sprite = createTextSprite(labelText, isCircular ? '#fca5a5' : '#f8fafc');
+    sprite.position.set(pos.x, pos.y + radius + 7, pos.z);
+    this.nodeGroup.add(sprite);
+    this.nodeLabelMap.set(node.id, sprite);
+  }
+
+  addEdge(edge) {
+    if (!edge || !edge.source || !edge.target) return;
+    const srcNode = this.nodeMeshMap.get(edge.source);
+    const tgtNode = this.nodeMeshMap.get(edge.target);
+    if (!srcNode || !tgtNode) return;
+
+    const isCircular = edge.status === 'circular' || (edge.tags && edge.tags.includes('CIRCULAR_DEPENDENCY'));
+    const edgeColorHex = isCircular ? COLOR_CYCLIC_EDGE : COLOR_NORMAL_EDGE;
+
+    const segments = isCircular ? 16 : 1;
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+      points.push(new Vector3().copy(srcNode.position));
+    }
+
+    const geom = new BufferGeometry().setFromPoints(points);
+    const mat = new LineBasicMaterial({
+      color: edgeColorHex,
+      opacity: isCircular ? 1.0 : 0.75,
+      transparent: true,
+      linewidth: isCircular ? 2.5 : 1
+    });
+
+    const line = new Line(geom, mat);
+    this.edgeGroup.add(line);
+
+    this.edgeObjectList.push({
+      line,
+      geom,
+      edge,
+      sourceMesh: srcNode,
+      targetMesh: tgtNode,
+      isCircular,
+      segments
+    });
   }
 
   clearGraph() {
@@ -333,7 +427,13 @@ export class Vault3D {
 
     this.camEndTarget.copy(center);
     this.camEndDist = 380;
-    this.camStartDir.set(0, 0.4, 0.9).normalize();
+
+    const curOffset = new Vector3().subVectors(this.camStartPos, this.camStartTarget);
+    this.camStartDist = Math.max(30, curOffset.length());
+
+    this.camStartDir.copy(curOffset).normalize();
+    if (this.camStartDir.lengthSq() < 0.001) this.camStartDir.set(0, 0.35, 0.92).normalize();
+
     this.camEndDir.set(0, 0.35, 0.92).normalize();
     this.camEndPos.copy(center).add(this.camEndDir.clone().multiplyScalar(this.camEndDist));
   }
@@ -364,13 +464,14 @@ export class Vault3D {
   }
 
   _onResize() {
-    this.width = this.canvas.clientWidth || window.innerWidth;
-    this.height = this.canvas.clientHeight || window.innerHeight;
+    const dims = this._getContainerDimensions();
+    this.width = dims.width;
+    this.height = dims.height;
 
     if (this.camera && this.renderer) {
       this.camera.aspect = this.width / this.height;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(this.width, this.height);
+      this.renderer.setSize(this.width, this.height, false);
     }
   }
 
@@ -395,12 +496,13 @@ export class Vault3D {
 
       // Slerp direction with obstacle clearing arc lift
       const dir = new Vector3().lerpVectors(this.camStartDir, this.camEndDir, ease).normalize();
-      const arcLift = Math.sin(Math.PI * ease) * 25.0; // Arc parabola
+      const arcLift = Math.sin(Math.PI * ease) * 20.0; // Arc parabola
       const dist = (1 - ease) * this.camStartDist + ease * this.camEndDist;
 
       this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(dist));
       this.camera.position.y += arcLift;
 
+      this.camera.lookAt(this.controls.target);
       this.controls.syncFromCamera();
 
       if (u >= 1.0) {

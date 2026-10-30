@@ -898,9 +898,9 @@ export class WebGLRenderer {
     this.pixelRatio = ratio || 1.0;
   }
 
-  setSize(width, height, updateStyle = true) {
-    this.domElement.width = width * this.pixelRatio;
-    this.domElement.height = height * this.pixelRatio;
+  setSize(width, height, updateStyle = false) {
+    this.domElement.width = Math.round(width * this.pixelRatio);
+    this.domElement.height = Math.round(height * this.pixelRatio);
     if (updateStyle) {
       this.domElement.style.width = width + 'px';
       this.domElement.style.height = height + 'px';
@@ -1094,6 +1094,7 @@ export class WebGLRenderer {
       gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
     }
 
+    let aNorm = -1;
     if (normAttr) {
       if (!geometry._normBuf) geometry._normBuf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, geometry._normBuf);
@@ -1101,7 +1102,7 @@ export class WebGLRenderer {
         gl.bufferData(gl.ARRAY_BUFFER, normAttr.array, gl.STATIC_DRAW);
         geometry._normUploaded = true;
       }
-      const aNorm = gl.getAttribLocation(program, 'aNormal');
+      aNorm = gl.getAttribLocation(program, 'aNormal');
       if (aNorm !== -1) {
         gl.enableVertexAttribArray(aNorm);
         gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, 0, 0);
@@ -1121,6 +1122,7 @@ export class WebGLRenderer {
     }
 
     if (aPos !== -1) gl.disableVertexAttribArray(aPos);
+    if (aNorm !== -1) gl.disableVertexAttribArray(aNorm);
   }
 
   drawLines(geometry, program, isSegments = false) {
