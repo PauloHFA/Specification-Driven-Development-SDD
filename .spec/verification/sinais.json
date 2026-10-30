@@ -302,10 +302,10 @@
       "codigo": "VERIFY_OBSOLETO",
       "feature": "vault-3d",
       "ref": "—",
-      "ocorrencias": 2,
+      "ocorrencias": 3,
       "primeiraVez": "2026-10-29T21:28:39.874Z",
-      "ultimaVez": "2026-10-30T01:33:43.068Z",
-      "gitRev": "456a1e2"
+      "ultimaVez": "2026-10-30T02:29:16.268Z",
+      "gitRev": "1cf91b5"
     }
   }
 }

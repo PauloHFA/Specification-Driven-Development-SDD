@@ -61,6 +61,12 @@
     <main id="viewport-container">
       <canvas id="vault-canvas"></canvas>
 
+      <!-- Interactive Connection Mode Banner -->
+      <div id="connect-mode-banner" class="floating-banner hidden">
+        <span>⚡ <strong>Modo Conexão:</strong> Clique em qualquer nó no espaço 3D para conectar com <strong id="connect-source-name" style="color:#38bdf8;">...</strong></span>
+        <button type="button" id="btn-cancel-connect" class="btn btn-sm btn-secondary">Cancelar</button>
+      </div>
+
       <!-- Bottom Floating Legend -->
       <div id="legend-panel" class="floating-panel">
         <div class="legend-header">Legenda de Tipos</div>
@@ -125,10 +131,14 @@
         </div>
 
         <div class="drawer-section">
-          <label>Ações do Nó</label>
-          <button id="btn-hud-connect" class="btn btn-secondary btn-full" title="Conectar este nó a outro elemento do grafo">
-            🔗 Conectar a Outro Nó
+          <label>Ações Rápidas de Conexão</label>
+          <button id="btn-hud-interactive-connect" class="btn btn-primary btn-full" title="Clique aqui e depois clique em qualquer esfera 3D para conectar visualmente">
+            ⚡ Conectar Clicando em Outro Nó
           </button>
+          <div class="quick-connect-row" style="display: flex; gap: 8px; margin-top: 10px;">
+            <select id="select-hud-connect-target" class="flex-1" style="font-size: 12px;"></select>
+            <button id="btn-hud-quick-connect" class="btn btn-secondary" title="Criar conexão com o nó selecionado">Ligar</button>
+          </div>
         </div>
 
         <div class="drawer-section">
@@ -155,11 +165,6 @@
           <button id="btn-modal-close" class="btn-icon-close" title="Fechar">&times;</button>
         </div>
         <form id="form-add-node" class="modal-body">
-          <div class="form-group">
-            <label for="new-node-id">Identificador Único (ID):</label>
-            <input type="text" id="new-node-id" required placeholder="Ex: US-003, FEAT:pagamento, NOTA-1" autocomplete="off">
-          </div>
-
           <div class="form-row">
             <div class="form-group flex-1">
               <label for="new-node-type">Tipo de Componente:</label>
@@ -170,15 +175,20 @@
                 <option value="task">Tarefa Técnica (T)</option>
                 <option value="principle">Princípio / Regra (P)</option>
                 <option value="file">Arquivo / Código (FILE)</option>
-                <option value="generic">Nota Geral</option>
+                <option value="generic">Nota Geral (NOTA)</option>
               </select>
             </div>
             <div class="form-group flex-1">
-              <label for="new-node-target">Conectar a (Opcional):</label>
-              <select id="new-node-target">
-                <option value="">(Nenhum - nó independente)</option>
-              </select>
+              <label for="new-node-id">ID (Auto-Gerado):</label>
+              <input type="text" id="new-node-id" required style="background: rgba(15, 23, 42, 0.6); color: #38bdf8; font-family: var(--font-mono); font-weight: 600;" readonly>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label for="new-node-target">Conectar a (Opcional):</label>
+            <select id="new-node-target">
+              <option value="">(Nenhum - nó independente)</option>
+            </select>
           </div>
 
           <div class="form-group">

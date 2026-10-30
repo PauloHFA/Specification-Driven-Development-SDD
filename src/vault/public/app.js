@@ -61,6 +61,17 @@ class VaultApp {
     this.newNodeTitle = document.getElementById('new-node-title');
     this.newNodeSnippet = document.getElementById('new-node-snippet');
 
+    // Connection Elements
+    this.btnHudInteractiveConnect = document.getElementById('btn-hud-interactive-connect');
+    this.selectHudConnectTarget = document.getElementById('select-hud-connect-target');
+    this.btnHudQuickConnect = document.getElementById('btn-hud-quick-connect');
+
+    this.connectModeBanner = document.getElementById('connect-mode-banner');
+    this.connectSourceName = document.getElementById('connect-source-name');
+    this.btnCancelConnect = document.getElementById('btn-cancel-connect');
+
+    this.isConnectingMode = false;
+    this.connectSourceNode = null;
     this.inspectedNode = null;
     this._lastPhysicsTime = performance.now();
   }
@@ -133,19 +144,91 @@ class VaultApp {
     if (this.formAddNode) {
       this.formAddNode.addEventListener('submit', (e) => this.handleAddNodeSubmit(e));
     }
-    if (this.btnHudConnect) {
-      this.btnHudConnect.addEventListener('click', () => this.handleConnectFromHud());
+    if (this.newNodeType) {
+      this.newNodeType.addEventListener('change', () => {
+        this.newNodeId.value = this.generateNextId(this.newNodeType.value);
+      });
+    }
+
+    // Connection Mode Handlers
+    if (this.btnHudInteractiveConnect) {
+      this.btnHudInteractiveConnect.addEventListener('click', () => {
+        this.startInteractiveConnect(this.inspectedNode);
+      });
+    }
+    if (this.btnCancelConnect) {
+      this.btnCancelConnect.addEventListener('click', () => {
+        this.stopInteractiveConnect();
+      });
+    }
+    if (this.btnHudQuickConnect) {
+      this.btnHudQuickConnect.addEventListener('click', () => {
+        this.handleQuickConnect();
+      });
     }
 
     this.vault3D.onNodeClickCallback = (nodeData) => {
-      if (nodeData) {
-        this.openInspector(nodeData);
+      if (!nodeData) return;
+
+      // If user is in click-to-connect mode:
+      if (this.isConnectingMode && this.connectSourceNode) {
+        if (nodeData.id === this.connectSourceNode.id) {
+          alert('Não é possível conectar um nó a ele mesmo. Clique em outro nó.');
+          return;
+        }
+
+        const success = this.createConnection(this.connectSourceNode.id, nodeData.id);
+        this.stopInteractiveConnect();
+        if (success) {
+          this.vault3D.focusNode(nodeData.id);
+          this.openInspector(nodeData);
+        }
+        return;
       }
+
+      this.openInspector(nodeData);
     };
+  }
+
+  generateNextId(type) {
+    if (!this.currentGraph || !this.currentGraph.nodes) return 'NOTA-001';
+
+    const prefixMap = {
+      story: 'US-',
+      criterion: 'AC-',
+      task: 'T-',
+      feature: 'FEAT-',
+      principle: 'P-',
+      file: 'FILE-',
+      generic: 'NOTA-'
+    };
+
+    const prefix = prefixMap[type] || 'NOTA-';
+    let maxNum = 0;
+
+    for (const node of this.currentGraph.nodes) {
+      if (!node.id) continue;
+      const idUpper = node.id.toUpperCase();
+      if (idUpper.startsWith(prefix)) {
+        const numPart = idUpper.slice(prefix.length);
+        const parsed = parseInt(numPart, 10);
+        if (!isNaN(parsed) && parsed > maxNum) {
+          maxNum = parsed;
+        }
+      }
+    }
+
+    const next = maxNum + 1;
+    return `${prefix}${String(next).padStart(3, '0')}`;
   }
 
   openAddNodeModal() {
     if (!this.currentGraph) return;
+
+    this.newNodeType.value = 'story';
+    this.newNodeId.value = this.generateNextId('story');
+    this.newNodeTitle.value = '';
+    this.newNodeSnippet.value = '';
 
     // Populate connect target dropdown with existing nodes
     this.newNodeTarget.innerHTML = '<option value="">(Nenhum - nó independente)</option>';
@@ -156,11 +239,10 @@ class VaultApp {
       this.newNodeTarget.appendChild(opt);
     }
 
-    // Default suggestion for ID
-    const nextIdx = (this.currentGraph.nodes.length || 0) + 1;
-    this.newNodeId.value = `NOTA-${nextIdx}`;
-    this.newNodeTitle.value = '';
-    this.newNodeSnippet.value = '';
+    // If a node is already inspected, pre-select it as the connection target!
+    if (this.inspectedNode) {
+      this.newNodeTarget.value = this.inspectedNode.id;
+    }
 
     this.modalAddNode.classList.remove('hidden');
     this.newNodeTitle.focus();
@@ -170,21 +252,76 @@ class VaultApp {
     this.modalAddNode.classList.add('hidden');
   }
 
+  startInteractiveConnect(sourceNode) {
+    if (!sourceNode) return;
+    this.isConnectingMode = true;
+    this.connectSourceNode = sourceNode;
+    this.connectSourceName.textContent = `${sourceNode.id} (${sourceNode.title ? sourceNode.title.slice(0, 20) : sourceNode.type})`;
+    this.connectModeBanner.classList.remove('hidden');
+    this.closeInspector();
+  }
+
+  stopInteractiveConnect() {
+    this.isConnectingMode = false;
+    this.connectSourceNode = null;
+    this.connectModeBanner.classList.add('hidden');
+  }
+
+  createConnection(sourceId, targetId, type = 'relates_to') {
+    if (!sourceId || !targetId || sourceId === targetId || !this.currentGraph) return false;
+
+    // Check duplicate edge
+    const exists = this.currentGraph.edges.some(e =>
+      (e.source === sourceId && e.target === targetId) ||
+      (e.source === targetId && e.target === sourceId)
+    );
+    if (exists) {
+      alert(`Já existe uma conexão entre "${sourceId}" e "${targetId}".`);
+      return false;
+    }
+
+    const newEdge = {
+      source: sourceId,
+      target: targetId,
+      type,
+      status: 'valid',
+      tags: []
+    };
+
+    this.currentGraph.edges.push(newEdge);
+    this.vault3D.addEdge(newEdge);
+    this.syncPhysicsGraph();
+    this.updateIntegrityStatus(this.currentGraph);
+    return true;
+  }
+
+  handleQuickConnect() {
+    if (!this.inspectedNode || !this.selectHudConnectTarget) return;
+    const targetId = this.selectHudConnectTarget.value;
+    if (!targetId) return;
+
+    const success = this.createConnection(this.inspectedNode.id, targetId);
+    if (success) {
+      this.openInspector(this.inspectedNode);
+    }
+  }
+
   handleAddNodeSubmit(e) {
     e.preventDefault();
     if (!this.currentGraph) return;
 
-    const id = this.newNodeId.value.trim();
+    const id = this.newNodeId.value.trim() || this.generateNextId(this.newNodeType.value);
     const title = this.newNodeTitle.value.trim();
     const type = this.newNodeType.value || 'story';
     const snippet = this.newNodeSnippet.value.trim() || `Nota criada interativamente no Cofre 3D: ${title}`;
     const targetId = this.newNodeTarget.value;
 
-    if (!id || !title) return;
+    if (!title) return;
 
     // Check duplicate ID
     if (this.currentGraph.nodes.some(n => n.id === id)) {
-      alert(`O ID "${id}" já existe no grafo. Por favor escolha um identificador único.`);
+      alert(`O ID "${id}" já existe no grafo. Gerando novo identificador...`);
+      this.newNodeId.value = this.generateNextId(type);
       return;
     }
 
@@ -242,58 +379,6 @@ class VaultApp {
     // Lerp camera and inspect
     this.vault3D.focusNode(id);
     this.openInspector(newNode);
-  }
-
-  handleConnectFromHud() {
-    if (!this.inspectedNode || !this.currentGraph) return;
-
-    const sourceId = this.inspectedNode.id;
-    const candidates = this.currentGraph.nodes.filter(n => n.id !== sourceId);
-    if (candidates.length === 0) {
-      alert('Não há outros nós disponíveis para conexão.');
-      return;
-    }
-
-    const targetList = candidates.map((n, i) => `${i + 1}. ${n.id} (${n.title || n.type})`).join('\n');
-    const chosen = prompt(`Conectar "${sourceId}" a qual nó?\n\nDigite o ID exato ou o número da lista:\n\n${targetList}`);
-    if (!chosen) return;
-
-    let targetNode = candidates.find(n => n.id.toLowerCase() === chosen.trim().toLowerCase());
-    if (!targetNode) {
-      const idx = parseInt(chosen.trim(), 10) - 1;
-      if (!isNaN(idx) && candidates[idx]) {
-        targetNode = candidates[idx];
-      }
-    }
-
-    if (!targetNode) {
-      alert(`Nó "${chosen}" não encontrado.`);
-      return;
-    }
-
-    // Avoid duplicate edges
-    const exists = this.currentGraph.edges.some(e =>
-      (e.source === sourceId && e.target === targetNode.id) ||
-      (e.source === targetNode.id && e.target === sourceId)
-    );
-    if (exists) {
-      alert(`Já existe uma conexão entre "${sourceId}" e "${targetNode.id}".`);
-      return;
-    }
-
-    const newEdge = {
-      source: sourceId,
-      target: targetNode.id,
-      type: 'relates_to',
-      status: 'valid',
-      tags: []
-    };
-
-    this.currentGraph.edges.push(newEdge);
-    this.vault3D.addEdge(newEdge);
-    this.syncPhysicsGraph();
-    this.updateIntegrityStatus(this.currentGraph);
-    this.openInspector(this.inspectedNode);
   }
 
   syncPhysicsGraph() {
@@ -473,6 +558,18 @@ class VaultApp {
         if (targetNode) this.openInspector(targetNode);
       });
       this.hudOutgoingList.appendChild(li);
+    }
+
+    // Populate quick-connect target select with other nodes
+    if (this.selectHudConnectTarget && this.currentGraph) {
+      this.selectHudConnectTarget.innerHTML = '';
+      const otherNodes = (this.currentGraph.nodes || []).filter(n => n.id !== node.id);
+      for (const n of otherNodes) {
+        const opt = document.createElement('option');
+        opt.value = n.id;
+        opt.textContent = `${n.id} — ${n.title ? n.title.slice(0, 22) : n.type}`;
+        this.selectHudConnectTarget.appendChild(opt);
+      }
     }
 
     this.hudDrawer.classList.remove('closed');
