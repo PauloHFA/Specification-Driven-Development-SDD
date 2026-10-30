@@ -27,8 +27,13 @@ import { cmdVault, run } from '../../src/cli.js';
 function request(path, options = {}) {
   return new Promise((resolve, reject) => {
     try {
+      let pushed = false;
       const reqStream = new Readable({
         read() {
+          if (!pushed && options.body) {
+            pushed = true;
+            this.push(Buffer.from(options.body, 'utf-8'));
+          }
           this.push(null);
         }
       });
@@ -343,6 +348,28 @@ describe('3D Vault Server (F9 & Interface Contracts)', () => {
       const res = await request('/api/graph', { method: 'OPTIONS' });
       assert.strictEqual(res.statusCode, 204);
       assert.strictEqual(res.headers['access-control-allow-origin'], '*');
+    });
+
+    it('supports GET, POST, and DELETE on /api/graph/custom for bidirectional persistence', async () => {
+      const postRes = await request('/api/graph/custom', {
+        method: 'POST',
+        body: JSON.stringify({
+          nodes: [{ id: 'NOTA-999', title: 'Test Custom Node', type: 'generic' }],
+          edges: [{ source: 'US-001', target: 'NOTA-999', type: 'relates_to' }]
+        })
+      });
+      assert.strictEqual(postRes.statusCode, 200);
+      assert.strictEqual(postRes.json().status, 'saved');
+
+      const getRes = await request('/api/graph/custom');
+      assert.strictEqual(getRes.statusCode, 200);
+      const saved = getRes.json();
+      assert.strictEqual(saved.nodes.length, 1);
+      assert.strictEqual(saved.nodes[0].id, 'NOTA-999');
+
+      const delRes = await request('/api/graph/custom', { method: 'DELETE' });
+      assert.strictEqual(delRes.statusCode, 200);
+      assert.strictEqual(delRes.json().nodes.length, 0);
     });
   });
 

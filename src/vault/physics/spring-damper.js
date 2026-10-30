@@ -440,6 +440,39 @@ export class SpringSimulation {
   }
 
   /**
+   * Checks whether a node is currently pinned.
+   * @param {string} id
+   * @returns {boolean}
+   */
+  isNodePinned(id) {
+    const node = this.nodes.get(id);
+    return Boolean(node && node.pinned);
+  }
+
+  /**
+   * Removes a node and any connected edges from the simulation.
+   * @param {string} id
+   */
+  removeNode(id) {
+    const strId = String(id);
+    if (!this.nodes.has(strId)) return;
+    this.nodes.delete(strId);
+    this.nodeList = this.nodeList.filter(n => n.id !== strId);
+    this.edges = this.edges.filter(e => e.source !== strId && e.target !== strId);
+    this.wake();
+  }
+
+  /**
+   * Removes a directed edge from the simulation.
+   * @param {string} source
+   * @param {string} target
+   */
+  removeEdge(source, target) {
+    this.edges = this.edges.filter(e => !(e.source === source && e.target === target));
+    this.wake();
+  }
+
+  /**
    * Returns kinetic, potential, and total simulation energy.
    * @returns {{ kinetic: number, potential: number, total: number, isResting: boolean }}
    */

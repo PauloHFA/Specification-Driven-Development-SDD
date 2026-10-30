@@ -13,6 +13,7 @@ import {
   WebGLRenderer,
   Mesh,
   SphereGeometry,
+  MeshBasicMaterial,
   MeshPhongMaterial,
   LineBasicMaterial,
   Line,
@@ -127,6 +128,20 @@ export class Vault3D {
 
     this.selectedNodeId = null;
     this.onNodeClickCallback = null;
+    this.onNodeDragCallback = null;
+    this.onNodeDragEndCallback = null;
+
+    // 3D Node Drag State (Shift + Drag)
+    this.isDraggingNode = false;
+    this.draggedNodeId = null;
+    this.dragPlanePoint = new Vector3();
+    this.dragPlaneNormal = new Vector3();
+
+    // Legend Type Filtering State
+    this.hiddenTypes = new Set();
+
+    // Shared Pulse Geometry for Directional Data Flow
+    this.pulseGeometry = new SphereGeometry(2.1, 10, 8);
 
     // Camera Lerp State
     this.isTransitioning = false;
@@ -146,6 +161,8 @@ export class Vault3D {
 
     this._boundAnimate = this._animate.bind(this);
     this._boundOnPointerDown = this._onPointerDown.bind(this);
+    this._boundOnPointerMove = this._onPointerMove.bind(this);
+    this._boundOnPointerUp = this._onPointerUp.bind(this);
     this._boundOnResize = this._onResize.bind(this);
   }
 
@@ -200,6 +217,8 @@ export class Vault3D {
     this._buildHolographicBaseGrid();
 
     this.canvas.addEventListener('pointerdown', this._boundOnPointerDown);
+    window.addEventListener('pointermove', this._boundOnPointerMove);
+    window.addEventListener('pointerup', this._boundOnPointerUp);
     window.addEventListener('resize', this._boundOnResize);
 
     // Initial resize sync after layout
@@ -293,44 +312,67 @@ export class Vault3D {
       this.nodeLabelMap.set(node.id, sprite);
     }
 
-    // 2. Build Edge Connections
+    // 2. Build Edge Connections & Directional Flow Pulses
+    let edgeIdx = 0;
     for (const edge of edges) {
-      const srcNode = this.nodeMeshMap.get(edge.source);
-      const tgtNode = this.nodeMeshMap.get(edge.target);
-      if (!srcNode || !tgtNode) continue;
-
-      const isCircular = edge.status === 'circular' || (edge.tags && edge.tags.includes('CIRCULAR_DEPENDENCY'));
-      const edgeColorHex = isCircular ? COLOR_CYCLIC_EDGE : COLOR_NORMAL_EDGE;
-
-      const segments = isCircular ? 16 : 1;
-      const points = [];
-      for (let i = 0; i <= segments; i++) {
-        points.push(new Vector3().copy(srcNode.position));
-      }
-
-      const geom = new BufferGeometry().setFromPoints(points);
-      const mat = new LineBasicMaterial({
-        color: edgeColorHex,
-        opacity: isCircular ? 1.0 : 0.65,
-        transparent: true,
-        linewidth: isCircular ? 2.5 : 1
-      });
-
-      const line = new Line(geom, mat);
-      this.edgeGroup.add(line);
-
-      this.edgeObjectList.push({
-        line,
-        geom,
-        edge,
-        sourceMesh: srcNode,
-        targetMesh: tgtNode,
-        isCircular,
-        segments
-      });
+      this._createEdgeVisual(edge, edgeIdx++);
     }
 
     this.resetView();
+  }
+
+  _createPulseMesh(isCircular) {
+    const mat = new MeshPhongMaterial({
+      color: isCircular ? 0xff4444 : 0x7dd3fc,
+      emissive: isCircular ? 0xdc2626 : 0x0284c7,
+      shininess: 90,
+      transparent: true,
+      opacity: 0.95
+    });
+    const pulseMesh = new Mesh(this.pulseGeometry, mat);
+    this.edgeGroup.add(pulseMesh);
+    return pulseMesh;
+  }
+
+  _createEdgeVisual(edge, index = 0) {
+    const srcNode = this.nodeMeshMap.get(edge.source);
+    const tgtNode = this.nodeMeshMap.get(edge.target);
+    if (!srcNode || !tgtNode) return;
+
+    const isCircular = edge.status === 'circular' || (edge.tags && edge.tags.includes('CIRCULAR_DEPENDENCY'));
+    const edgeColorHex = isCircular ? COLOR_CYCLIC_EDGE : COLOR_NORMAL_EDGE;
+
+    const segments = isCircular ? 16 : 1;
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+      points.push(new Vector3().copy(srcNode.position));
+    }
+
+    const geom = new BufferGeometry().setFromPoints(points);
+    const mat = new LineBasicMaterial({
+      color: edgeColorHex,
+      opacity: isCircular ? 1.0 : 0.65,
+      transparent: true,
+      linewidth: isCircular ? 2.5 : 1
+    });
+
+    const line = new Line(geom, mat);
+    this.edgeGroup.add(line);
+
+    const pulseMesh = this._createPulseMesh(isCircular);
+    pulseMesh.position.copy(srcNode.position);
+
+    this.edgeObjectList.push({
+      line,
+      geom,
+      pulseMesh,
+      phaseOffset: (index * 0.29) % 1.0,
+      edge,
+      sourceMesh: srcNode,
+      targetMesh: tgtNode,
+      isCircular,
+      segments
+    });
   }
 
   addNode(node) {
@@ -369,43 +411,96 @@ export class Vault3D {
     sprite.position.set(pos.x, pos.y + radius + 7, pos.z);
     this.nodeGroup.add(sprite);
     this.nodeLabelMap.set(node.id, sprite);
+
+    if (node.pinned) {
+      this.setNodePinnedVisual(node.id, true);
+    }
   }
 
   addEdge(edge) {
     if (!edge || !edge.source || !edge.target) return;
-    const srcNode = this.nodeMeshMap.get(edge.source);
-    const tgtNode = this.nodeMeshMap.get(edge.target);
-    if (!srcNode || !tgtNode) return;
+    this._createEdgeVisual(edge, this.edgeObjectList.length);
+  }
 
-    const isCircular = edge.status === 'circular' || (edge.tags && edge.tags.includes('CIRCULAR_DEPENDENCY'));
-    const edgeColorHex = isCircular ? COLOR_CYCLIC_EDGE : COLOR_NORMAL_EDGE;
+  removeNode(nodeId) {
+    const mesh = this.nodeMeshMap.get(nodeId);
+    if (mesh) {
+      this.nodeGroup.remove(mesh);
+      this.nodeMeshMap.delete(nodeId);
+    }
+    const label = this.nodeLabelMap.get(nodeId);
+    if (label) {
+      this.nodeGroup.remove(label);
+      this.nodeLabelMap.delete(nodeId);
+    }
+    this.nodeDataMap.delete(nodeId);
 
-    const segments = isCircular ? 16 : 1;
-    const points = [];
-    for (let i = 0; i <= segments; i++) {
-      points.push(new Vector3().copy(srcNode.position));
+    const remainingEdges = [];
+    for (const item of this.edgeObjectList) {
+      if (item.edge.source === nodeId || item.edge.target === nodeId) {
+        this.edgeGroup.remove(item.line);
+        if (item.pulseMesh) this.edgeGroup.remove(item.pulseMesh);
+      } else {
+        remainingEdges.push(item);
+      }
+    }
+    this.edgeObjectList = remainingEdges;
+  }
+
+  removeEdge(sourceId, targetId) {
+    const remainingEdges = [];
+    for (const item of this.edgeObjectList) {
+      if (item.edge.source === sourceId && item.edge.target === targetId) {
+        this.edgeGroup.remove(item.line);
+        if (item.pulseMesh) this.edgeGroup.remove(item.pulseMesh);
+      } else {
+        remainingEdges.push(item);
+      }
+    }
+    this.edgeObjectList = remainingEdges;
+  }
+
+  setNodePinnedVisual(nodeId, isPinned) {
+    const mesh = this.nodeMeshMap.get(nodeId);
+    if (!mesh) return;
+    const radius = mesh.geometry ? mesh.geometry.radius || 7 : 7;
+
+    if (isPinned) {
+      if (!mesh.userData.pinRing) {
+        const pinRing = createOrbitRing(radius * 1.45, 0xf59e0b);
+        pinRing.rotation.x = Math.PI * 0.25;
+        mesh.add(pinRing);
+        mesh.userData.pinRing = pinRing;
+      }
+      mesh.userData.pinRing.visible = true;
+    } else if (mesh.userData.pinRing) {
+      mesh.userData.pinRing.visible = false;
+    }
+  }
+
+  setTypeFilter(hiddenTypesSet) {
+    this.hiddenTypes = new Set(hiddenTypesSet);
+
+    for (const [id, mesh] of this.nodeMeshMap.entries()) {
+      const nodeData = this.nodeDataMap.get(id) || {};
+      const nType = nodeData.type || 'generic';
+      const isCircular = Boolean(mesh.userData && mesh.userData.isCircular);
+
+      let isHidden = this.hiddenTypes.has(nType);
+      if (isCircular && this.hiddenTypes.has('circular')) {
+        isHidden = true;
+      }
+
+      mesh.visible = !isHidden;
+      const label = this.nodeLabelMap.get(id);
+      if (label) label.visible = !isHidden;
     }
 
-    const geom = new BufferGeometry().setFromPoints(points);
-    const mat = new LineBasicMaterial({
-      color: edgeColorHex,
-      opacity: isCircular ? 1.0 : 0.75,
-      transparent: true,
-      linewidth: isCircular ? 2.5 : 1
-    });
-
-    const line = new Line(geom, mat);
-    this.edgeGroup.add(line);
-
-    this.edgeObjectList.push({
-      line,
-      geom,
-      edge,
-      sourceMesh: srcNode,
-      targetMesh: tgtNode,
-      isCircular,
-      segments
-    });
+    for (const item of this.edgeObjectList) {
+      const visible = item.sourceMesh.visible && item.targetMesh.visible;
+      item.line.visible = visible;
+      if (item.pulseMesh) item.pulseMesh.visible = visible;
+    }
   }
 
   clearGraph() {
@@ -504,19 +599,83 @@ export class Vault3D {
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const meshes = Array.from(this.nodeMeshMap.values());
+    const meshes = Array.from(this.nodeMeshMap.values()).filter(m => m.visible);
     const intersects = this.raycaster.intersectObjects(meshes, false);
 
     if (intersects.length > 0) {
       const hitObject = intersects[0].object;
       const nodeId = hitObject.userData && hitObject.userData.nodeId;
       if (nodeId) {
+        // Shift + Drag initiates 3D Spatial Node Dragging
+        if (event.shiftKey) {
+          this.isDraggingNode = true;
+          this.draggedNodeId = nodeId;
+          this.dragPlanePoint.copy(hitObject.position);
+          this.dragPlaneNormal.subVectors(this.camera.position, this.controls.target).normalize();
+          if (this.dragPlaneNormal.lengthSq() === 0) this.dragPlaneNormal.set(0, 0, 1);
+
+          this.controls.enabled = false;
+          this.isTransitioning = false;
+          this.canvas.style.cursor = 'grabbing';
+
+          if (this.onNodeClickCallback) {
+            const nodeData = this.nodeDataMap.get(nodeId);
+            this.onNodeClickCallback(nodeData);
+          }
+          return;
+        }
+
         this.focusNode(nodeId);
         if (this.onNodeClickCallback) {
           const nodeData = this.nodeDataMap.get(nodeId);
           this.onNodeClickCallback(nodeData);
         }
       }
+    }
+  }
+
+  _onPointerMove(event) {
+    if (!this.isDraggingNode || !this.draggedNodeId) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+
+    const denom = this.raycaster.direction.dot(this.dragPlaneNormal);
+    if (Math.abs(denom) > 1e-5) {
+      const diff = new Vector3().subVectors(this.dragPlanePoint, this.raycaster.origin);
+      const t = diff.dot(this.dragPlaneNormal) / denom;
+      if (t > 0) {
+        const newPos = this.raycaster.origin.clone().add(this.raycaster.direction.clone().multiplyScalar(t));
+        const mesh = this.nodeMeshMap.get(this.draggedNodeId);
+        const label = this.nodeLabelMap.get(this.draggedNodeId);
+        if (mesh) {
+          mesh.position.copy(newPos);
+          if (label) {
+            const r = mesh.geometry ? mesh.geometry.radius || 6 : 6;
+            label.position.set(newPos.x, newPos.y + r + 7, newPos.z);
+          }
+        }
+        if (this.onNodeDragCallback) {
+          this.onNodeDragCallback(this.draggedNodeId, newPos);
+        }
+      }
+    }
+  }
+
+  _onPointerUp() {
+    if (!this.isDraggingNode) return;
+    const nodeId = this.draggedNodeId;
+    const mesh = nodeId ? this.nodeMeshMap.get(nodeId) : null;
+    this.isDraggingNode = false;
+    this.draggedNodeId = null;
+    if (this.controls) this.controls.enabled = true;
+    this.canvas.style.cursor = 'default';
+
+    if (nodeId && mesh && this.onNodeDragEndCallback) {
+      this.onNodeDragEndCallback(nodeId, mesh.position.clone());
     }
   }
 
@@ -569,17 +728,29 @@ export class Vault3D {
       this.controls.update();
     }
 
-    // 2. Update Dynamic Edges & Real-Time Standing Wave Vibration
+    // 2. Update Dynamic Edges, Standing Wave Vibration & Directional Flow Pulses
     for (const item of this.edgeObjectList) {
       const p1 = item.sourceMesh.position;
       const p2 = item.targetMesh.position;
       const geom = item.geom;
       const posAttr = geom.getAttribute('position');
 
+      // Compute directional pulse progress s in [0, 1] from source -> target
+      const speed = item.isCircular ? 1.1 : 0.42;
+      const pulseT = (timeSec * speed + (item.phaseOffset || 0)) % 1.0;
+
       if (!item.isCircular) {
         // Straight elastic line
         posAttr.setXYZ(0, p1.x, p1.y, p1.z);
         posAttr.setXYZ(1, p2.x, p2.y, p2.z);
+
+        if (item.pulseMesh && item.line.visible) {
+          item.pulseMesh.position.set(
+            (1 - pulseT) * p1.x + pulseT * p2.x,
+            (1 - pulseT) * p1.y + pulseT * p2.y,
+            (1 - pulseT) * p1.z + pulseT * p2.z
+          );
+        }
       } else {
         // Active Standing Wave Harmonic Vibration (Lissajous + Jitter)
         const rx = p2.x - p1.x, ry = p2.y - p1.y, rz = p2.z - p1.z;
@@ -622,6 +793,17 @@ export class Vault3D {
           const vz = (1 - s) * p1.z + s * p2.z + dispN * nz + dispB * bz;
 
           posAttr.setXYZ(k, vx, vy, vz);
+        }
+
+        if (item.pulseMesh && item.line.visible) {
+          const pEnv = Math.sin(Math.PI * pulseT);
+          const pDispN = pEnv * (oscN + jitter);
+          const pDispB = pEnv * oscB;
+          item.pulseMesh.position.set(
+            (1 - pulseT) * p1.x + pulseT * p2.x + pDispN * nx + pDispB * bx,
+            (1 - pulseT) * p1.y + pulseT * p2.y + pDispN * ny + pDispB * by,
+            (1 - pulseT) * p1.z + pulseT * p2.z + pDispN * nz + pDispB * bz
+          );
         }
       }
       posAttr.needsUpdate = true;

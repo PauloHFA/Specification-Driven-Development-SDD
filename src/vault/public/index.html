@@ -39,6 +39,9 @@
           <button id="btn-add-node" class="btn btn-primary" title="Adicionar nova nota, componente ou critério ao painel 3D">
             <span class="btn-icon">➕</span> <span class="btn-text">Novo Nó</span>
           </button>
+          <button id="btn-export-graph" class="btn btn-secondary" title="Salvar no disco (.spec/) e exportar grafo em Markdown (.md) + JSON">
+            <span class="btn-icon">💾</span> <span class="btn-text">Salvar / Exportar</span>
+          </button>
           <button id="btn-toggle-physics" class="btn btn-secondary" title="Pausar ou retomar simulação de física elástica">
             <span class="btn-icon">⏸</span> <span class="btn-text">Pausar Física</span>
           </button>
@@ -74,17 +77,26 @@
         <button type="button" id="btn-cancel-connect" class="btn btn-sm btn-secondary">Cancelar</button>
       </div>
 
-      <!-- Bottom Floating Legend -->
+      <!-- Hot-Reload & Persistence Toast Banner -->
+      <div id="toast-notification" class="floating-toast hidden">
+        <span id="toast-text">⚡ Sincronizado em tempo real</span>
+      </div>
+
+      <!-- Bottom Floating Legend (Interactive Filters) -->
       <div id="legend-panel" class="floating-panel">
-        <div class="legend-header">Legenda de Tipos</div>
+        <div class="legend-header">
+          <span>Filtros de Tipos (Clique)</span>
+          <button type="button" id="btn-legend-reset" class="btn-legend-reset" title="Mostrar todos os tipos">Todos</button>
+        </div>
         <div class="legend-grid">
-          <div class="legend-item"><span class="color-dot type-feature"></span> Feature</div>
-          <div class="legend-item"><span class="color-dot type-story"></span> História (US)</div>
-          <div class="legend-item"><span class="color-dot type-criterion"></span> Critério (AC)</div>
-          <div class="legend-item"><span class="color-dot type-task"></span> Tarefa (T)</div>
-          <div class="legend-item"><span class="color-dot type-principle"></span> Princípio</div>
-          <div class="legend-item"><span class="color-dot type-file"></span> Arquivo/Código</div>
-          <div class="legend-item"><span class="color-dot status-circular"></span> Ciclo / Erro</div>
+          <div class="legend-item filter-pill" data-filter-type="feature" title="Clique para filtrar Features"><span class="color-dot type-feature"></span> Feature</div>
+          <div class="legend-item filter-pill" data-filter-type="story" title="Clique para filtrar Histórias"><span class="color-dot type-story"></span> História (US)</div>
+          <div class="legend-item filter-pill" data-filter-type="criterion" title="Clique para filtrar Critérios"><span class="color-dot type-criterion"></span> Critério (AC)</div>
+          <div class="legend-item filter-pill" data-filter-type="task" title="Clique para filtrar Tarefas"><span class="color-dot type-task"></span> Tarefa (T)</div>
+          <div class="legend-item filter-pill" data-filter-type="principle" title="Clique para filtrar Princípios"><span class="color-dot type-principle"></span> Princípio</div>
+          <div class="legend-item filter-pill" data-filter-type="file" title="Clique para filtrar Arquivos"><span class="color-dot type-file"></span> Arquivo/Código</div>
+          <div class="legend-item filter-pill" data-filter-type="generic" title="Clique para filtrar Notas"><span class="color-dot type-generic"></span> Nota Geral</div>
+          <div class="legend-item filter-pill" data-filter-type="circular" title="Clique para filtrar Ciclos"><span class="color-dot status-circular"></span> Ciclo / Erro</div>
         </div>
       </div>
 
@@ -94,6 +106,7 @@
         <div class="guidance-row"><span>Arrastar (Dir.):</span> Pan</div>
         <div class="guidance-row"><span>Roda Mouse:</span> Zoom</div>
         <div class="guidance-row"><span>Clique no Nó:</span> Focar & Lerp</div>
+        <div class="guidance-row"><span>Shift + Arrastar:</span> Mover Nó 3D</div>
       </div>
 
       <!-- Stats Bar -->
@@ -141,13 +154,21 @@
         </div>
 
         <div class="drawer-section">
-          <label>Ações Rápidas de Conexão</label>
+          <label>Ações Rápidas de Conexão & Controle</label>
           <button id="btn-hud-interactive-connect" class="btn btn-primary btn-full" title="Clique aqui e depois clique em qualquer esfera 3D para conectar visualmente">
             ⚡ Conectar Clicando em Outro Nó
           </button>
           <div class="quick-connect-row" style="display: flex; gap: 8px; margin-top: 10px;">
             <select id="select-hud-connect-target" class="flex-1" style="font-size: 12px;"></select>
             <button id="btn-hud-quick-connect" class="btn btn-secondary" title="Criar conexão com o nó selecionado">Ligar</button>
+          </div>
+          <div class="node-action-row" style="display: flex; gap: 8px; margin-top: 10px;">
+            <button id="btn-hud-pin-node" class="btn btn-secondary flex-1" title="Fixar ou soltar a posição física deste nó no espaço 3D">
+              📌 Fixar Posição
+            </button>
+            <button id="btn-hud-delete-node" class="btn btn-danger" title="Excluir este nó e suas conexões do grafo">
+              🗑️ Excluir Nó
+            </button>
           </div>
         </div>
 

@@ -491,7 +491,48 @@ select:focus {
 .type-task { background: var(--accent-amber); box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
 .type-principle { background: #ec4899; box-shadow: 0 0 8px rgba(236, 72, 153, 0.5); }
 .type-file { background: #64748b; box-shadow: 0 0 6px rgba(100, 116, 139, 0.4); }
+.type-generic { background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.45); }
 .status-circular { background: var(--accent-crimson); box-shadow: 0 0 10px var(--accent-crimson); animation: pulse-dot 1s infinite alternate; }
+
+/* Interactive Legend Filter Pills */
+.filter-pill {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.filter-pill:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: var(--text-main);
+}
+
+.filter-pill.filter-off {
+  opacity: 0.32;
+  text-decoration: line-through;
+  filter: grayscale(0.7);
+}
+
+.btn-legend-reset {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.btn-legend-reset:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #ffffff;
+}
 
 @keyframes pulse-dot {
   from { transform: scale(0.9); opacity: 0.8; }
@@ -867,4 +908,69 @@ textarea {
 @keyframes pulse-banner {
   from { box-shadow: 0 6px 22px rgba(124, 58, 237, 0.45); }
   to { box-shadow: 0 10px 38px rgba(124, 58, 237, 0.8), 0 0 24px rgba(56, 189, 248, 0.5); }
+}
+
+/* Danger & Pinned Action Buttons */
+.btn-danger {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.32);
+  border-color: rgba(239, 68, 68, 0.8);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+
+.btn-pinned {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fcd34d;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-remove-edge {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.btn-remove-edge:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #ffffff;
+}
+
+/* Floating Toast Notification (Live Hot-Reload & Sync) */
+.floating-toast {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(16, 185, 129, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #ffffff;
+  padding: 8px 20px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
+  z-index: 160;
+  font-size: 12.5px;
+  font-weight: 600;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.floating-toast.hidden {
+  display: none !important;
 }

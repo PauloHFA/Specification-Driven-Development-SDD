@@ -2,12 +2,16 @@
  * @file src/vault/public/app.js
  * @description Main Web Application Coordinator for the 3D Vault.
  * Bridges backend API endpoints, SpringSimulation elastic physics,
- * Vault3D WebGL renderer, and the slide-out Side Inspection HUD drawer.
+ * Vault3D WebGL renderer, interactive legend filters, 3D node dragging/pinning,
+ * bidirectional persistence (.spec/vault-custom.json + localStorage + Markdown export),
+ * and real-time Server-Sent Events (SSE) hot-reload.
  * Pure ESM, zero external runtime dependencies. Runs 100% offline.
  */
 
 import { Vault3D } from './vault-3d.js';
 import { SpringSimulation } from '/physics/spring-damper.js';
+
+const STORAGE_KEY = 'sdd_vault_custom_graph_v1';
 
 class VaultApp {
   constructor() {
@@ -18,11 +22,16 @@ class VaultApp {
 
     this.currentGraph = null;
     this.currentScenario = 'live_sdd';
+    this.hiddenTypes = new Set();
+    this.customNodes = [];
+    this.customEdges = [];
+    this.deletedNodeIds = new Set();
 
     // UI Elements
     this.scenarioSelect = document.getElementById('scenario-select');
     this.btnTogglePhysics = document.getElementById('btn-toggle-physics');
     this.btnResetView = document.getElementById('btn-reset-view');
+    this.btnExportGraph = document.getElementById('btn-export-graph');
     this.inputSearch = document.getElementById('input-search');
     this.integrityBadge = document.getElementById('integrity-badge');
     this.integrityText = document.getElementById('integrity-text');
@@ -30,6 +39,15 @@ class VaultApp {
     this.statNodes = document.getElementById('stat-nodes');
     this.statEdges = document.getElementById('stat-edges');
     this.statEnergy = document.getElementById('stat-energy');
+
+    // Toast Notification
+    this.toastBanner = document.getElementById('toast-notification');
+    this.toastText = document.getElementById('toast-text');
+    this._toastTimer = null;
+
+    // Legend Filter Elements
+    this.legendPills = document.querySelectorAll('.filter-pill[data-filter-type]');
+    this.btnLegendReset = document.getElementById('btn-legend-reset');
 
     // HUD Elements
     this.hudDrawer = document.getElementById('inspector-hud');
@@ -47,7 +65,13 @@ class VaultApp {
     this.hudIntegrityWarning = document.getElementById('hud-integrity-warning');
     this.hudIncomingList = document.getElementById('hud-incoming-list');
     this.hudOutgoingList = document.getElementById('hud-outgoing-list');
-    this.btnHudConnect = document.getElementById('btn-hud-connect');
+
+    // HUD Action Buttons
+    this.btnHudInteractiveConnect = document.getElementById('btn-hud-interactive-connect');
+    this.selectHudConnectTarget = document.getElementById('select-hud-connect-target');
+    this.btnHudQuickConnect = document.getElementById('btn-hud-quick-connect');
+    this.btnHudPinNode = document.getElementById('btn-hud-pin-node');
+    this.btnHudDeleteNode = document.getElementById('btn-hud-delete-node');
 
     // Creation Modal Elements
     this.btnAddNode = document.getElementById('btn-add-node');
@@ -61,11 +85,7 @@ class VaultApp {
     this.newNodeTitle = document.getElementById('new-node-title');
     this.newNodeSnippet = document.getElementById('new-node-snippet');
 
-    // Connection Elements
-    this.btnHudInteractiveConnect = document.getElementById('btn-hud-interactive-connect');
-    this.selectHudConnectTarget = document.getElementById('select-hud-connect-target');
-    this.btnHudQuickConnect = document.getElementById('btn-hud-quick-connect');
-
+    // Connection Mode Banner
     this.connectModeBanner = document.getElementById('connect-mode-banner');
     this.connectSourceName = document.getElementById('connect-source-name');
     this.btnCancelConnect = document.getElementById('btn-cancel-connect');
@@ -74,16 +94,103 @@ class VaultApp {
     this.connectSourceNode = null;
     this.inspectedNode = null;
     this._lastPhysicsTime = performance.now();
+    this.eventSource = null;
   }
 
   async init() {
     this.vault3D.init();
 
     this.bindEvents();
+    await this.loadCustomState();
     await this.loadScenario(this.currentScenario);
+    this.initLiveHotReload();
 
     // Physics step loop
     this.runPhysicsLoop();
+  }
+
+  showToast(message, durationMs = 2800) {
+    if (!this.toastBanner || !this.toastText) return;
+    this.toastText.textContent = message;
+    this.toastBanner.classList.remove('hidden');
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this.toastBanner.classList.add('hidden');
+    }, durationMs);
+  }
+
+  async loadCustomState() {
+    // 1. Load from localStorage fallback
+    try {
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw);
+        if (Array.isArray(parsed.nodes)) this.customNodes = parsed.nodes;
+        if (Array.isArray(parsed.edges)) this.customEdges = parsed.edges;
+      }
+    } catch {
+      // Ignore storage error
+    }
+
+    // 2. Sync from disk (.spec/vault-custom.json) via API
+    try {
+      const res = await fetch('/api/graph/custom');
+      if (res.ok) {
+        const diskData = await res.json();
+        if (Array.isArray(diskData.nodes) && diskData.nodes.length > 0) {
+          this.customNodes = diskData.nodes;
+        }
+        if (Array.isArray(diskData.edges) && diskData.edges.length > 0) {
+          this.customEdges = diskData.edges;
+        }
+      }
+    } catch {
+      // Offline fallback uses localStorage
+    }
+  }
+
+  async persistCustomState() {
+    const payload = {
+      nodes: this.customNodes,
+      edges: this.customEdges
+    };
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore localStorage quota
+    }
+
+    try {
+      await fetch('/api/graph/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      // Ignore network error if offline
+    }
+  }
+
+  initLiveHotReload() {
+    if (typeof EventSource === 'undefined') return;
+    try {
+      this.eventSource = new EventSource('/api/events');
+      this.eventSource.addEventListener('spec-changed', async (e) => {
+        if (this.currentScenario !== 'live_sdd') return;
+        try {
+          const info = JSON.parse(e.data || '{}');
+          // Avoid self-triggering reload when vault-custom.json is written by us
+          if (info.filename && info.filename.includes('vault-custom.json')) return;
+          await this.loadScenario('live_sdd', { preserveCamera: true });
+          this.showToast(`⚡ Hot-Reload: ${info.filename || '.spec/'} atualizado em tempo real!`);
+        } catch {
+          // Ignore parse error
+        }
+      });
+    } catch {
+      // SSE optional
+    }
   }
 
   bindEvents() {
@@ -99,6 +206,7 @@ class VaultApp {
       if (this.isPhysicsEnabled) {
         textSpan.textContent = 'Pausar Física';
         iconSpan.textContent = '⏸';
+        if (this.physics) this.physics.wake();
       } else {
         textSpan.textContent = 'Retomar Física';
         iconSpan.textContent = '▶';
@@ -108,6 +216,39 @@ class VaultApp {
     this.btnResetView.addEventListener('click', () => {
       this.vault3D.resetView();
     });
+
+    if (this.btnExportGraph) {
+      this.btnExportGraph.addEventListener('click', () => {
+        this.exportAndSaveGraph();
+      });
+    }
+
+    // Interactive Legend Filter Pills
+    for (const pill of this.legendPills) {
+      pill.addEventListener('click', () => {
+        const type = pill.getAttribute('data-filter-type');
+        if (!type) return;
+        if (this.hiddenTypes.has(type)) {
+          this.hiddenTypes.delete(type);
+          pill.classList.remove('filter-off');
+        } else {
+          this.hiddenTypes.add(type);
+          pill.classList.add('filter-off');
+        }
+        this.vault3D.setTypeFilter(this.hiddenTypes);
+      });
+    }
+
+    if (this.btnLegendReset) {
+      this.btnLegendReset.addEventListener('click', () => {
+        this.hiddenTypes.clear();
+        for (const pill of this.legendPills) {
+          pill.classList.remove('filter-off');
+        }
+        this.vault3D.setTypeFilter(this.hiddenTypes);
+        this.showToast('🎯 Todos os filtros de camadas ativados');
+      });
+    }
 
     this.inputSearch.addEventListener('input', (e) => {
       this.handleSearch(e.target.value.trim());
@@ -150,7 +291,7 @@ class VaultApp {
       });
     }
 
-    // Connection Mode Handlers
+    // Connection & Node Control Handlers
     if (this.btnHudInteractiveConnect) {
       this.btnHudInteractiveConnect.addEventListener('click', () => {
         this.startInteractiveConnect(this.inspectedNode);
@@ -166,14 +307,26 @@ class VaultApp {
         this.handleQuickConnect();
       });
     }
+    if (this.btnHudPinNode) {
+      this.btnHudPinNode.addEventListener('click', () => {
+        this.togglePinInspectedNode();
+      });
+    }
+    if (this.btnHudDeleteNode) {
+      this.btnHudDeleteNode.addEventListener('click', () => {
+        if (this.inspectedNode) {
+          this.deleteNode(this.inspectedNode.id);
+        }
+      });
+    }
 
+    // 3D Node Click & Drag Callbacks
     this.vault3D.onNodeClickCallback = (nodeData) => {
       if (!nodeData) return;
 
-      // If user is in click-to-connect mode:
       if (this.isConnectingMode && this.connectSourceNode) {
         if (nodeData.id === this.connectSourceNode.id) {
-          alert('Não é possível conectar um nó a ele mesmo. Clique em outro nó.');
+          this.showToast('⚠ Clique em um nó diferente para conectar');
           return;
         }
 
@@ -189,9 +342,30 @@ class VaultApp {
       this.openInspector(nodeData);
     };
 
+    this.vault3D.onNodeDragCallback = (nodeId, newPos) => {
+      if (this.physics) {
+        this.physics.setNodePosition(nodeId, newPos);
+        this.physics.pinNode(nodeId, true);
+      }
+      const node = this.currentGraph?.nodes.find(n => n.id === nodeId);
+      if (node) {
+        node.position = { x: newPos.x, y: newPos.y, z: newPos.z };
+      }
+    };
+
+    this.vault3D.onNodeDragEndCallback = (nodeId, finalPos) => {
+      const node = this.currentGraph?.nodes.find(n => n.id === nodeId);
+      if (node) {
+        node.position = { x: finalPos.x, y: finalPos.y, z: finalPos.z };
+        if (this.physics && !node.pinned) {
+          this.physics.unpinNode(nodeId);
+        }
+      }
+      this.showToast(`📌 Nó ${nodeId} reposicionado no espaço 3D`);
+    };
+
     // Global Keyboard Navigation
     window.addEventListener('keydown', (e) => {
-      // Focus search on '/'
       if (e.key === '/' && document.activeElement !== this.inputSearch &&
           document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
@@ -200,7 +374,6 @@ class VaultApp {
         return;
       }
 
-      // Escape key to dismiss modals, connecting mode, or inspector
       if (e.key === 'Escape') {
         if (this.isConnectingMode) {
           this.stopInteractiveConnect();
@@ -210,7 +383,7 @@ class VaultApp {
           this.closeAddNodeModal();
           return;
         }
-        if (this.inspectorHud && !this.inspectorHud.classList.contains('closed')) {
+        if (this.hudDrawer && !this.hudDrawer.classList.contains('closed')) {
           this.closeInspector();
           return;
         }
@@ -262,7 +435,6 @@ class VaultApp {
     this.newNodeTitle.value = '';
     this.newNodeSnippet.value = '';
 
-    // Populate connect target dropdown with existing nodes
     this.newNodeTarget.innerHTML = '<option value="">(Nenhum - nó independente)</option>';
     for (const n of this.currentGraph.nodes) {
       const opt = document.createElement('option');
@@ -271,7 +443,6 @@ class VaultApp {
       this.newNodeTarget.appendChild(opt);
     }
 
-    // If a node is already inspected, pre-select it as the connection target!
     if (this.inspectedNode) {
       this.newNodeTarget.value = this.inspectedNode.id;
     }
@@ -302,13 +473,12 @@ class VaultApp {
   createConnection(sourceId, targetId, type = 'relates_to') {
     if (!sourceId || !targetId || sourceId === targetId || !this.currentGraph) return false;
 
-    // Check duplicate edge
     const exists = this.currentGraph.edges.some(e =>
       (e.source === sourceId && e.target === targetId) ||
       (e.source === targetId && e.target === sourceId)
     );
     if (exists) {
-      alert(`Já existe uma conexão entre "${sourceId}" e "${targetId}".`);
+      this.showToast(`⚠ Conexão entre ${sourceId} e ${targetId} já existe`);
       return false;
     }
 
@@ -321,10 +491,129 @@ class VaultApp {
     };
 
     this.currentGraph.edges.push(newEdge);
+    this.customEdges.push(newEdge);
     this.vault3D.addEdge(newEdge);
     this.syncPhysicsGraph();
     this.updateIntegrityStatus(this.currentGraph);
+    this.persistCustomState();
+    this.showToast(`🔗 Conexão criada: ${sourceId} → ${targetId}`);
     return true;
+  }
+
+  removeConnection(sourceId, targetId) {
+    if (!this.currentGraph) return;
+    this.currentGraph.edges = this.currentGraph.edges.filter(
+      e => !(e.source === sourceId && e.target === targetId)
+    );
+    this.customEdges = this.customEdges.filter(
+      e => !(e.source === sourceId && e.target === targetId)
+    );
+    this.vault3D.removeEdge(sourceId, targetId);
+    if (this.physics) {
+      this.physics.removeEdge(sourceId, targetId);
+    }
+    this.updateIntegrityStatus(this.currentGraph);
+    this.persistCustomState();
+    if (this.inspectedNode) {
+      this.openInspector(this.inspectedNode);
+    }
+    this.showToast(`✂️ Conexão ${sourceId} → ${targetId} removida`);
+  }
+
+  deleteNode(nodeId) {
+    if (!this.currentGraph || !nodeId) return;
+    this.deletedNodeIds.add(nodeId);
+    this.currentGraph.nodes = this.currentGraph.nodes.filter(n => n.id !== nodeId);
+    this.currentGraph.edges = this.currentGraph.edges.filter(
+      e => e.source !== nodeId && e.target !== nodeId
+    );
+    this.customNodes = this.customNodes.filter(n => n.id !== nodeId);
+    this.customEdges = this.customEdges.filter(
+      e => e.source !== nodeId && e.target !== nodeId
+    );
+
+    this.vault3D.removeNode(nodeId);
+    if (this.physics) {
+      this.physics.removeNode(nodeId);
+    }
+
+    this.closeInspector();
+    this.updateIntegrityStatus(this.currentGraph);
+    this.persistCustomState();
+    this.showToast(`🗑️ Nó ${nodeId} excluído do grafo`);
+  }
+
+  togglePinInspectedNode() {
+    if (!this.inspectedNode) return;
+    this.inspectedNode.pinned = !this.inspectedNode.pinned;
+    const isPinned = Boolean(this.inspectedNode.pinned);
+
+    if (this.physics) {
+      this.physics.pinNode(this.inspectedNode.id, isPinned);
+    }
+    this.vault3D.setNodePinnedVisual(this.inspectedNode.id, isPinned);
+    this.updatePinButtonUI(isPinned);
+    this.persistCustomState();
+    this.showToast(isPinned
+      ? `📌 Posição de ${this.inspectedNode.id} fixada no espaço 3D`
+      : `🔓 Posição de ${this.inspectedNode.id} liberada para física elástica`
+    );
+  }
+
+  updatePinButtonUI(isPinned) {
+    if (!this.btnHudPinNode) return;
+    if (isPinned) {
+      this.btnHudPinNode.textContent = '📌 Posição Fixada';
+      this.btnHudPinNode.classList.add('btn-pinned');
+    } else {
+      this.btnHudPinNode.textContent = '📌 Fixar Posição';
+      this.btnHudPinNode.classList.remove('btn-pinned');
+    }
+  }
+
+  async exportAndSaveGraph() {
+    if (!this.currentGraph) return;
+    await this.persistCustomState();
+
+    // Build Markdown SDD summary
+    const lines = [
+      `# Exportação do Cofre 3D — Spatial Knowledge Graph`,
+      ``,
+      `- **Gerado em:** ${new Date().toISOString()}`,
+      `- **Cenário:** ${this.currentScenario}`,
+      `- **Total de Nós:** ${this.currentGraph.nodes.length}`,
+      `- **Total de Arestas:** ${this.currentGraph.edges.length}`,
+      ``,
+      `## Nós do Grafo`,
+      ``
+    ];
+
+    for (const n of this.currentGraph.nodes) {
+      lines.push(`### [${n.id}] ${n.title || '(sem título)'} (\`${n.type}\`)`);
+      if (n.snippet) {
+        lines.push(`${n.snippet}`);
+      }
+      lines.push(``);
+    }
+
+    lines.push(`## Conexões Direcionadas (DAG / Relações)`);
+    lines.push(``);
+    for (const e of this.currentGraph.edges) {
+      lines.push(`- \`${e.source}\` ➔ \`${e.target}\` (${e.type || 'ref'})`);
+    }
+
+    const mdContent = lines.join('\n');
+    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vault-sdd-graph-${this.currentScenario}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    this.showToast('💾 Salvo em .spec/vault-custom.json e exportado em Markdown (.md)!');
   }
 
   handleQuickConnect() {
@@ -350,14 +639,11 @@ class VaultApp {
 
     if (!title) return;
 
-    // Check duplicate ID
     if (this.currentGraph.nodes.some(n => n.id === id)) {
-      alert(`O ID "${id}" já existe no grafo. Gerando novo identificador...`);
       this.newNodeId.value = this.generateNextId(type);
       return;
     }
 
-    // Reference position near target node if connected, or near origin
     let initialPos = {
       x: (Math.random() - 0.5) * 80,
       y: (Math.random() - 0.5) * 80,
@@ -385,10 +671,11 @@ class VaultApp {
       mass: type === 'feature' ? 2.5 : type === 'story' ? 1.8 : 1.0,
       tags: [],
       auditFindings: [],
-      metadata: {}
+      metadata: { custom: true }
     };
 
     this.currentGraph.nodes.push(newNode);
+    this.customNodes.push(newNode);
     this.vault3D.addNode(newNode);
 
     if (targetId) {
@@ -400,17 +687,18 @@ class VaultApp {
         tags: []
       };
       this.currentGraph.edges.push(newEdge);
+      this.customEdges.push(newEdge);
       this.vault3D.addEdge(newEdge);
     }
 
-    // Synchronize physics
     this.syncPhysicsGraph();
     this.updateIntegrityStatus(this.currentGraph);
+    this.persistCustomState();
     this.closeAddNodeModal();
 
-    // Lerp camera and inspect
     this.vault3D.focusNode(id);
     this.openInspector(newNode);
+    this.showToast(`🚀 Nó ${id} criado e salvo no Cofre 3D`);
   }
 
   syncPhysicsGraph() {
@@ -434,7 +722,7 @@ class VaultApp {
     });
   }
 
-  async loadScenario(scenarioName) {
+  async loadScenario(scenarioName, options = {}) {
     try {
       this.integrityText.textContent = 'Carregando...';
       const url = scenarioName === 'live_sdd'
@@ -445,9 +733,26 @@ class VaultApp {
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
 
       const data = await res.json();
+
+      // Merge persisted custom nodes & edges when viewing live_sdd
+      if (scenarioName === 'live_sdd') {
+        const existingIds = new Set(data.nodes.map(n => n.id));
+        for (const cn of this.customNodes) {
+          if (!existingIds.has(cn.id) && !this.deletedNodeIds.has(cn.id)) {
+            data.nodes.push(cn);
+            existingIds.add(cn.id);
+          }
+        }
+        for (const ce of this.customEdges) {
+          if (existingIds.has(ce.source) && existingIds.has(ce.target)) {
+            const dup = data.edges.some(e => e.source === ce.source && e.target === ce.target);
+            if (!dup) data.edges.push(ce);
+          }
+        }
+      }
+
       this.currentGraph = data;
 
-      // Initialize Elastic Physics Engine (Symplectic Euler + Damped Springs)
       this.physics = new SpringSimulation(data, {
         kRepulsion: 3500.0,
         softening: 25.0,
@@ -458,9 +763,14 @@ class VaultApp {
       });
 
       this.vault3D.loadGraph(data);
+      if (this.hiddenTypes.size > 0) {
+        this.vault3D.setTypeFilter(this.hiddenTypes);
+      }
       this.vault3D._onResize();
       this.updateIntegrityStatus(data);
-      this.closeInspector();
+      if (!options.preserveCamera) {
+        this.closeInspector();
+      }
     } catch (err) {
       console.error('Failed to load graph scenario:', err);
       this.integrityBadge.className = 'badge badge-circular';
@@ -482,8 +792,8 @@ class VaultApp {
       this.integrityText.textContent = '✔ Grafo Íntegro (DAG)';
     }
 
-    this.statNodes.textContent = `${stats.nodeCount || data.nodes.length} nós`;
-    this.statEdges.textContent = `${stats.edgeCount || data.edges.length} arestas`;
+    this.statNodes.textContent = `${data.nodes.length} nós`;
+    this.statEdges.textContent = `${data.edges.length} arestas`;
   }
 
   runPhysicsLoop() {
@@ -526,6 +836,7 @@ class VaultApp {
 
     this.hudTitle.textContent = node.title || '(sem título)';
     this.hudSnippet.textContent = node.snippet || '(sem descrição adicional)';
+    this.updatePinButtonUI(Boolean(node.pinned));
 
     // GWT Clauses
     const isAc = node.type === 'criterion' || node.id.startsWith('AC-');
@@ -564,31 +875,57 @@ class VaultApp {
       this.sectionIntegrity.classList.add('hidden');
     }
 
-    // Connections
+    // Connections with inline Disconnect (✕) action
     const incoming = (this.currentGraph.edges || []).filter(e => e.target === node.id);
     const outgoing = (this.currentGraph.edges || []).filter(e => e.source === node.id);
 
     this.hudIncomingList.innerHTML = incoming.length > 0 ? '' : '<li style="cursor:default; opacity:0.6;">(nenhuma)</li>';
     for (const e of incoming) {
       const li = document.createElement('li');
-      li.textContent = `← ${e.source} [${e.type || 'ref'}]`;
-      li.addEventListener('click', () => {
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = `← ${e.source} [${e.type || 'ref'}]`;
+      labelSpan.addEventListener('click', () => {
         this.vault3D.focusNode(e.source);
         const targetNode = this.currentGraph.nodes.find(n => n.id === e.source);
         if (targetNode) this.openInspector(targetNode);
       });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn-remove-edge';
+      removeBtn.textContent = '✕';
+      removeBtn.title = `Desfazer conexão ${e.source} → ${node.id}`;
+      removeBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this.removeConnection(e.source, node.id);
+      });
+
+      li.appendChild(labelSpan);
+      li.appendChild(removeBtn);
       this.hudIncomingList.appendChild(li);
     }
 
     this.hudOutgoingList.innerHTML = outgoing.length > 0 ? '' : '<li style="cursor:default; opacity:0.6;">(nenhuma)</li>';
     for (const e of outgoing) {
       const li = document.createElement('li');
-      li.textContent = `→ ${e.target} [${e.type || 'ref'}]`;
-      li.addEventListener('click', () => {
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = `→ ${e.target} [${e.type || 'ref'}]`;
+      labelSpan.addEventListener('click', () => {
         this.vault3D.focusNode(e.target);
         const targetNode = this.currentGraph.nodes.find(n => n.id === e.target);
         if (targetNode) this.openInspector(targetNode);
       });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn-remove-edge';
+      removeBtn.textContent = '✕';
+      removeBtn.title = `Desfazer conexão ${node.id} → ${e.target}`;
+      removeBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this.removeConnection(node.id, e.target);
+      });
+
+      li.appendChild(labelSpan);
+      li.appendChild(removeBtn);
       this.hudOutgoingList.appendChild(li);
     }
 
@@ -616,29 +953,29 @@ class VaultApp {
     const q = (query || '').toLowerCase().trim();
 
     const matchingNodeIds = new Set();
-    for (const node of this.currentGraph.nodes) {
-      const mesh = this.vault3D.nodeMeshMap.get(node.id);
-      const label = this.vault3D.nodeLabelMap.get(node.id);
-      const matches = !q || node.id.toLowerCase().includes(q) || (node.title && node.title.toLowerCase().includes(q));
-      if (matches) {
-        matchingNodeIds.add(node.id);
-      }
-      if (mesh && label) {
-        mesh.material.opacity = matches ? 1.0 : 0.2;
-        label.material.opacity = matches ? 1.0 : 0.2;
+    if (q.length > 0) {
+      for (const node of this.currentGraph.nodes) {
+        if (
+          node.id.toLowerCase().includes(q) ||
+          (node.title && node.title.toLowerCase().includes(q)) ||
+          (node.snippet && node.snippet.toLowerCase().includes(q))
+        ) {
+          matchingNodeIds.add(node.id);
+        }
       }
     }
 
-    if (this.vault3D.edgeObjectList) {
-      for (const item of this.vault3D.edgeObjectList) {
-        if (!item.line || !item.line.material) continue;
-        const defaultOpacity = item.isCircular ? 1.0 : 0.65;
-        if (!q) {
-          item.line.material.opacity = defaultOpacity;
-        } else {
-          const edgeMatches = matchingNodeIds.has(item.edge.source) && matchingNodeIds.has(item.edge.target);
-          item.line.material.opacity = edgeMatches ? defaultOpacity : 0.1;
-        }
+    for (const [id, mesh] of this.vault3D.nodeMeshMap.entries()) {
+      const label = this.vault3D.nodeLabelMap.get(id);
+      if (q.length === 0) {
+        mesh.scale.set(1, 1, 1);
+        if (label) label.visible = mesh.visible;
+      } else if (matchingNodeIds.has(id)) {
+        mesh.scale.set(1.45, 1.45, 1.45);
+        if (label) label.visible = true;
+      } else {
+        mesh.scale.set(0.45, 0.45, 0.45);
+        if (label) label.visible = false;
       }
     }
   }
@@ -646,5 +983,5 @@ class VaultApp {
 
 window.addEventListener('DOMContentLoaded', () => {
   const app = new VaultApp();
-  app.init().catch(err => console.error('Error starting VaultApp:', err));
+  app.init();
 });
