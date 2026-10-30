@@ -1,0 +1,32 @@
+{
+  "feature": "vault-3d",
+  "timestamp": "2026-10-29T21:36:20.730Z",
+  "gitRev": "1c2b4a0",
+  "command": "node --test --test-reporter=tap \"test/vault/*.test.js\"",
+  "reporter": "tap",
+  "exitCode": 0,
+  "testsParsed": 204,
+  "results": {
+    "AC-001": {
+      "status": "pass",
+      "testName": "T1.1: Spherical orbit navigation alters azimuth and polar angles @spec:AC-001",
+      "method": "tap"
+    },
+    "AC-002": {
+      "status": "pass",
+      "testName": "T1.1: Coulomb electrostatic repulsion pushes close unlinked nodes apart @spec:AC-002",
+      "method": "tap"
+    },
+    "AC-003": {
+      "status": "pass",
+      "testName": "loads and constructs a complete SDD knowledge graph from example specs @spec:AC-003",
+      "method": "tap"
+    },
+    "AC-004": {
+      "status": "pass",
+      "testName": "lists all 5 mandatory synthetic scenarios @spec:AC-004",
+      "method": "tap"
+    }
+  },
+  "principles": {}
+}

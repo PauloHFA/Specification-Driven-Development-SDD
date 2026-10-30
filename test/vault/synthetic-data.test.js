@@ -25,7 +25,7 @@ import { assertCyclesEquivalent, assertSetEquals } from './test-helpers.js';
 
 describe('Synthetic SDD Datasets (R4 Validation Topologies)', () => {
   describe('Registry and Factory Contract', () => {
-    it('lists all 5 mandatory synthetic scenarios', () => {
+    it('lists all 5 mandatory synthetic scenarios @spec:AC-004', () => {
       const scenarios = listSyntheticScenarios();
       assert.deepEqual(scenarios.sort(), [
         'adversarial_drift',

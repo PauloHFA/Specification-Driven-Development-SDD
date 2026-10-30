@@ -30,49 +30,25 @@ import { parseConstitution } from '../../parsers/constitution.js';
 import { auditProject } from '../../core/audit.js';
 
 /**
- * Resolves the absolute path of the specification directory with intelligent fallbacks.
+ * Helper to locate reference example specifications.
  *
- * @param {string} [specDir] - Target spec path (e.g. '.spec', 'examples/inscricao-turma/.spec')
- * @param {Object} [options={}]
- * @param {string} [options.projectRoot] - Base directory for relative resolution
- * @param {boolean} [options.fallbackToExamples=true] - Search examples if specDir missing
- * @returns {string|null} Resolved absolute path or null if not found
+ * @param {string} projectRoot
+ * @returns {string|null}
  */
-export function resolveSpecDir(specDir, options = {}) {
-  const projectRoot = options.projectRoot || process.cwd();
+function resolveExamplesDir(projectRoot) {
+  const exampleCandidates = [
+    path.resolve(projectRoot, 'examples', 'inscricao-turma', '.spec')
+  ];
 
-  const candidates = [];
-
-  if (specDir && typeof specDir === 'string') {
-    if (path.isAbsolute(specDir)) {
-      candidates.push(specDir);
-    } else {
-      candidates.push(path.resolve(projectRoot, specDir));
-      candidates.push(path.resolve(specDir));
-    }
+  try {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const repoRoot = path.resolve(currentDir, '..', '..', '..');
+    exampleCandidates.push(path.resolve(repoRoot, 'examples', 'inscricao-turma', '.spec'));
+  } catch {
+    // URL resolution unavailable
   }
 
-  // Common workspace locations
-  candidates.push(path.resolve(projectRoot, '.spec'));
-  candidates.push(path.resolve(process.cwd(), '.spec'));
-
-  // Reference examples locations if enabled
-  if (options.fallbackToExamples !== false) {
-    candidates.push(path.resolve(projectRoot, 'examples', 'inscricao-turma', '.spec'));
-    candidates.push(path.resolve(process.cwd(), 'examples', 'inscricao-turma', '.spec'));
-
-    // Also look relative to this source file
-    try {
-      const currentDir = path.dirname(fileURLToPath(import.meta.url));
-      const repoRoot = path.resolve(currentDir, '..', '..', '..');
-      candidates.push(path.resolve(repoRoot, 'examples', 'inscricao-turma', '.spec'));
-      candidates.push(path.resolve(repoRoot, '.spec'));
-    } catch {
-      // Ignore if URL resolution unavailable
-    }
-  }
-
-  for (const candidate of candidates) {
+  for (const candidate of exampleCandidates) {
     if (existsSync(candidate)) {
       try {
         if (statSync(candidate).isDirectory()) {
@@ -82,6 +58,83 @@ export function resolveSpecDir(specDir, options = {}) {
         // Continue
       }
     }
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the absolute path of the specification directory with intelligent fallbacks.
+ *
+ * @param {string} [specDir] - Target spec path (e.g. '.spec', 'examples/inscricao-turma/.spec')
+ * @param {Object} [options={}]
+ * @param {string} [options.projectRoot] - Base directory for relative resolution
+ * @param {boolean} [options.fallbackToExamples=true] - Search examples if specDir missing
+ * @returns {string|null} Resolved absolute path or null if not found
+ */
+export function resolveSpecDir(specDir, options = {}) {
+  const hasExplicitRoot = Boolean(options.projectRoot);
+  const projectRoot = options.projectRoot || process.cwd();
+  const allowExamples = options.fallbackToExamples !== false;
+
+  // Case 1: Caller provided an explicit, non-empty specDir
+  if (specDir && typeof specDir === 'string' && specDir.trim().length > 0) {
+    const trimmed = specDir.trim();
+    const explicitCandidates = [];
+
+    if (path.isAbsolute(trimmed)) {
+      explicitCandidates.push(path.normalize(trimmed));
+    } else {
+      explicitCandidates.push(path.resolve(projectRoot, trimmed));
+      if (!hasExplicitRoot && path.resolve(process.cwd(), trimmed) !== path.resolve(projectRoot, trimmed)) {
+        explicitCandidates.push(path.resolve(process.cwd(), trimmed));
+      }
+    }
+
+    for (const candidate of explicitCandidates) {
+      if (existsSync(candidate)) {
+        try {
+          if (statSync(candidate).isDirectory()) {
+            return candidate;
+          }
+        } catch {
+          // Continue
+        }
+      }
+    }
+
+    // Explicit path was requested but does not exist on disk.
+    // If examples fallback is explicitly disabled, strictly fail immediately.
+    if (!allowExamples) {
+      return null;
+    }
+
+    // If caller specifically requested relative '.spec' (the default name) and it was not found,
+    // fallback to reference examples is permitted.
+    if (trimmed === '.spec' || trimmed === './.spec' || trimmed === '.\\.spec') {
+      return resolveExamplesDir(projectRoot);
+    }
+
+    // Custom explicit directories that do not exist must never fall back to root .spec or examples.
+    return null;
+  }
+
+  // Case 2: No explicit specDir provided (undefined, null, or empty string)
+  // Step 1: Check primary workspace location <projectRoot>/.spec
+  const defaultWorkspaceSpec = path.resolve(projectRoot, '.spec');
+  if (existsSync(defaultWorkspaceSpec)) {
+    try {
+      if (statSync(defaultWorkspaceSpec).isDirectory()) {
+        return defaultWorkspaceSpec;
+      }
+    } catch {
+      // Continue
+    }
+  }
+
+  // Step 2: Fall back to reference examples if enabled
+  if (allowExamples) {
+    return resolveExamplesDir(projectRoot);
   }
 
   return null;

@@ -12,7 +12,7 @@ import { Vector3 } from '../../src/vault/math/vector3.js';
 import { assertVector3Close } from './test-helpers.js';
 
 describe('F3: Elastic Physics & Spring-Damper — Tier 1 Feature Coverage', () => {
-  test('T1.1: Coulomb electrostatic repulsion pushes close unlinked nodes apart', () => {
+  test('T1.1: Coulomb electrostatic repulsion pushes close unlinked nodes apart @spec:AC-002', () => {
     // Two nodes placed very close at x=-2 and x=+2 (initial distance = 4)
     const graph = {
       nodes: [

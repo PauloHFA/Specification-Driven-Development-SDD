@@ -12,7 +12,7 @@ import { CameraController, easeOutQuint, slerpDirections } from '../../src/vault
 import { assertVector3Close, assertIsUnitVector } from './test-helpers.js';
 
 describe('F2: Camera Kinematics — Tier 1 Feature Coverage', () => {
-  test('T1.1: Spherical orbit navigation alters azimuth and polar angles', () => {
+  test('T1.1: Spherical orbit navigation alters azimuth and polar angles @spec:AC-001', () => {
     const cam = new CameraController({
       target: [0, 0, 0],
       position: [0, 0, 100], // On +Z axis: r=100, theta=0, phi=PI/2

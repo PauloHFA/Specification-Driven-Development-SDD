@@ -8,6 +8,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -29,7 +31,7 @@ describe('SDD Graph Adapter (F6 Specification Parser & 3D Bridge)', () => {
   const exampleSpecDir = 'examples/inscricao-turma/.spec';
 
   describe('Real Specification Ingestion (examples/inscricao-turma/.spec)', () => {
-    it('loads and constructs a complete SDD knowledge graph from example specs', () => {
+    it('loads and constructs a complete SDD knowledge graph from example specs @spec:AC-003', () => {
       const graph = loadSDDGraph(exampleSpecDir);
 
       assert.ok(graph);
@@ -246,10 +248,15 @@ describe('SDD Graph Adapter (F6 Specification Parser & 3D Bridge)', () => {
 
   describe('Fallback and Error Handling', () => {
     it('gracefully falls back to examples when specDir is not provided or relative .spec is requested', () => {
-      const graph = loadSDDGraph('.spec');
-      assert.ok(graph);
-      assert.equal(graph.stats.featureCount, 1);
-      assert.equal(graph.stats.storyCount, 2);
+      const tempProjectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdd-fallback-'));
+      try {
+        const graph = loadSDDGraph('.spec', { projectRoot: tempProjectRoot });
+        assert.ok(graph);
+        assert.equal(graph.stats.featureCount, 1);
+        assert.equal(graph.stats.storyCount, 2);
+      } finally {
+        fs.rmSync(tempProjectRoot, { recursive: true, force: true });
+      }
     });
 
     it('falls back to synthetic scenario when specDir does not exist and synthetic fallback is enabled', () => {

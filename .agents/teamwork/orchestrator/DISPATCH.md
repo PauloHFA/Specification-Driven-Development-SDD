@@ -52,3 +52,59 @@ Server has restarted and API quota has reset. Please resume execution of the 3D 
 From: 8e602acd-73ab-4fee-9387-70a60979719c (parent)
 
 O usuário confirmou aprovação ("aprovado"). Podem prosseguir a todo vapor com a validação do Marco 1 e início imediato do Marco 2 e Marco 3.
+
+## 2026-10-29T21:07:16Z
+From: 8e602acd-73ab-4fee-9387-70a60979719c (parent)
+
+VICTORY REJECTED by independent Victory Auditor.
+
+The audit failed due to 5 test failures under `node --test "test/vault/**/*.test.js"`, caused by `resolveSpecDir` in `src/vault/core/sdd-adapter.js` unconditionally falling back to root `.spec` when explicit non-existent directories are passed with `fallbackToExamples: false`.
+
+Full report from Victory Auditor:
+=== VICTORY AUDIT REPORT ===
+
+VERDICT: VICTORY REJECTED
+
+PHASE A — TIMELINE:
+  Result: FAIL
+  Anomalies:
+    - Untracked directory `.spec/` and file `onpspec.config.json` were created on disk at 2026-10-29 14:04:48, after final_reviewer_2 sign-off (commit 1c2b4a0 at 14:01:54).
+    - The team claimed 100% completion (163/163 pass) without independently re-running the test suite after creating the root `.spec/` folder.
+
+PHASE B — INTEGRITY CHECK:
+  Result: PASS
+  Details:
+    - Hardcoded test outputs: CLEAN. Genuine Tarjan SCC cycle detector, Symplectic Euler spring-damper physics, and standing wave generator.
+    - Facade detection: CLEAN. No dummy returns or empty stubs.
+    - Pre-populated artifacts: CLEAN. No fake log files.
+    - Dependency audit: CLEAN. Zero runtime dependencies in Node.js backend. Offline vendored Three.js / OrbitControls in browser public assets.
+
+PHASE C — INDEPENDENT TEST EXECUTION:
+  Test command: node --test "test/vault/**/*.test.js"
+  Results: 163 tests, 41 suites, 158 passed, 5 failed, exit code 1
+  Match: NO — 5 test failures detected
+
+EVIDENCE:
+    ✖ test at test\vault\sdd-adapter.test.js:248:5
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+      4 !== 2
+    ✖ test at test\vault\sdd-adapter.test.js:255:5
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+      + actual - expected
+      + 'sdd_specs'
+      - 'synthetic_fallback'
+    ✖ test at test\vault\sdd-adapter.test.js:270:5
+      AssertionError [ERR_ASSERTION]: Missing expected exception.
+      Expected: /Specification directory not found/
+    ✖ test at test\vault\sdd-adapter.test.js:281:5
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+      + actual - expected
+      + 'C:\\Projetos\\Specification-Driven-Development-SDD\\.spec'
+      - null
+    ✖ test at test\vault\phase2-adversarial-hardening.test.js:306:3
+      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+      + actual - expected
+      + 'sdd_specs'
+      - 'synthetic_fallback'
+
+Remediate `resolveSpecDir` in `src/vault/core/sdd-adapter.js` so that explicit non-existent directories respect `fallbackToExamples: false` and do not unconditionally default to root `.spec`. Ensure all 163 tests pass with 0 failures, and re-submit your victory claim.

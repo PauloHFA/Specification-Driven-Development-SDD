@@ -1,0 +1,13 @@
+{
+  "testCommand": "node --test --test-reporter=tap \"test/vault/*.test.js\"",
+  "reporter": "tap",
+  "testGlobs": [
+    "test/vault/*.test.js"
+  ],
+  "srcGlobs": [
+    "src/vault/**/*.js"
+  ],
+  "ignoreGlobs": [
+    "src/vault/public/vendor/**"
+  ]
+}
