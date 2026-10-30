@@ -183,6 +183,14 @@ Antes de gerar qualquer linha de código, o agente entrevistador (`teamwork_inte
 - Bateria de testes de estresse comprovando resiliência sob rajadas de 500 requisições HTTP simultâneas, ataques de *prototype pollution*, diretórios vazios de specs, 500 tarefas em estrela e estabilidade matemática sob timestamps de $t = 10^9$ segundos.
 - Certificação unânime e homologação pelo Victory Auditor.
 
+#### Marco 5: Evolução Pro UI/UX (Glassmorphism 2.0 & Interatividade Avançada)
+- **Estética Glassmorphism 2.0 & Grade Holográfica:** painéis translúcidos com `backdrop-filter: blur(24px)`, bordas especulares, anéis orbitais em nós de *Feature*, textos Retina DPI (512x128) e plano espacial concêntrico.
+- **Persistência Bidirecional & Exportação (`/api/graph/custom`):** gravação automática de nós e conexões customizados em `.spec/vault-custom.json` e `localStorage`, exclusão individual de nós/arestas pelo HUD e exportação completa em Markdown (`.md`).
+- **Filtros Rápidos por Camada:** pílulas interativas na legenda para isolar ou ocultar tipos de nós (`Feature`, `US`, `AC`, `Tarefa`, `Princípio`, `Arquivo`, `Ciclo`) em tempo real.
+- **Partículas de Fluxo Direcional (Data Flow Pulses):** esferas emissivas viajando continuamente ao longo das arestas ($u \to v$) indicando a direção do fluxo de dependência.
+- **Arraste Espacial 3D (`Shift + Arrastar`) & Fixação (`📌 Pin`):** movimentação livre de esferas em 3D com reação elástica em tempo real da malha conectada e travamento físico de coordenadas.
+- **Hot-Reload em Tempo Real via SSE (`/api/events`):** monitoramento nativo com `fs.watch` sobre `.spec/` que sincroniza o grafo 3D instantaneamente ao salvar arquivos `.md` na IDE.
+
 ---
 
 ## 🧪 Suíte de Testes Automatizada & Métricas de Qualidade
@@ -190,12 +198,12 @@ Antes de gerar qualquer linha de código, o agente entrevistador (`teamwork_inte
 Toda a solução é verificada mecanicamente com o test runner nativo do Node.js:
 
 ```bash
-# Executa todos os 163 testes do Cofre 3D
+# Executa todos os 164 testes do Cofre 3D
 node --test "test/vault/*.test.js"
 ```
 
 ### Resultados da Homologação:
-- **Testes do Cofre 3D:** **163 de 163 testes aprovados (100% PASS)** em ~400ms.
+- **Testes do Cofre 3D:** **164 de 164 testes aprovados (100% PASS)** em ~490ms.
 - **Sincronização das Skills (`test/skill-sync.test.js`):** **21 de 21 testes aprovados**.
 - **Auditoria Formal de CI:** `node bin/onp-spec.js audit --ci` com **0 erros e 0 avisos** (exit code 0).
 - **Provas Gravadas:** 4 de 4 critérios de aceite provados mecanicamente em `.spec/verification/vault-3d.json`.
