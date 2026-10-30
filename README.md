@@ -54,6 +54,17 @@ node bin/onp-spec.js vault --port 3333
 
 Acesse no navegador: **`http://localhost:3333`** (ou `http://127.0.0.1:3333`).
 
+### 🎮 Recursos Interativos da Aplicação
+- **➕ Criação Dinâmica de Componentes (`[➕ Novo Nó]`):**
+  - **IDs 100% Auto-Gerados:** Não é necessário digitar IDs. Ao escolher o tipo de componente (História, Feature, Critério, Tarefa, Princípio ou Nota), o sistema gera automaticamente o próximo identificador sequencial livre (`US-xxx`, `AC-xxx`, `FEAT-xxx`, `T-xxx`, `NOTA-xxx`).
+  - **Física Imediata:** O novo nó nasce no espaço 3D e é instantaneamente integrado à simulação física de molas amortecidas com foco suave de câmera.
+- **⚡ Conexão Visual de Nós por Clique Tridimensional:**
+  - Clique em qualquer nó para abrir o painel lateral e selecione **`⚡ Conectar Clicando em Outro Nó`**.
+  - O sistema entra no modo de conexão visual: basta **clicar em qualquer outra esfera 3D** para criar um cabo elástico dinâmico em tempo real!
+  - Também é possível conectar diretamente através do seletor suspenso no painel lateral.
+- **🔍 Inspeção Detalhada e Auditoria de Ciclos:**
+  - Painel lateral deslizante com critérios Given/When/Then, arquivos vinculados e alerta visual pulsante em caso de dependências circulares.
+
 ---
 
 ## 🧭 O Papel do Spec-Driven Development (SDD) na Orientação dos Agentes
