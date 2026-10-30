@@ -49,20 +49,16 @@ const COLOR_CYCLIC_EDGE = 0xef4444; // Neon Crimson
 const COLOR_CYCLIC_NODE = 0xef4444;
 
 /**
- * Creates a high-DPI text canvas texture for a billboard label.
+ * Creates a high-DPI text canvas texture for a billboard label with Retina sharpness.
  */
-function createTextSprite(text, color = '#f8fafc', bgColor = 'rgba(15, 23, 42, 0.85)') {
+function createTextSprite(text, color = '#f8fafc', bgColor = 'rgba(11, 16, 28, 0.90)', borderColor = 'rgba(56, 189, 248, 0.35)') {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = bgColor;
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
-  ctx.lineWidth = 2;
-
-  // Rounded rectangle pill
-  const r = 16, x = 4, y = 8, w = 248, h = 48;
+  // High-DPI Rounded rectangle pill
+  const r = 32, x = 8, y = 16, w = 496, h = 96;
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -70,20 +66,40 @@ function createTextSprite(text, color = '#f8fafc', bgColor = 'rgba(15, 23, 42, 0
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+
+  ctx.fillStyle = bgColor;
   ctx.fill();
+
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = borderColor;
   ctx.stroke();
 
-  ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+  // Typography with glowing neon text
+  ctx.font = '600 36px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 32);
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.fillText(text, 256, 64);
 
   const texture = new CanvasTexture(canvas);
   const material = new SpriteMaterial({ map: texture, transparent: true });
   const sprite = new Sprite(material);
-  sprite.scale.set(36, 9, 1);
+  sprite.scale.set(38, 9.5, 1);
   return sprite;
+}
+
+function createOrbitRing(radius, color = 0x8b5cf6) {
+  const points = [];
+  const segments = 36;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * Math.PI * 2;
+    points.push(new Vector3(Math.cos(theta) * radius, 0, Math.sin(theta) * radius));
+  }
+  const geom = new BufferGeometry().setFromPoints(points);
+  const mat = new LineBasicMaterial({ color, opacity: 0.45, transparent: true, linewidth: 1.5 });
+  return new Line(geom, mat);
 }
 
 export class Vault3D {
@@ -181,6 +197,7 @@ export class Vault3D {
 
     this.scene.add(this.edgeGroup);
     this.scene.add(this.nodeGroup);
+    this._buildHolographicBaseGrid();
 
     this.canvas.addEventListener('pointerdown', this._boundOnPointerDown);
     window.addEventListener('resize', this._boundOnResize);
@@ -189,6 +206,38 @@ export class Vault3D {
     setTimeout(() => this._onResize(), 50);
 
     requestAnimationFrame(this._boundAnimate);
+  }
+
+  _buildHolographicBaseGrid() {
+    const gridGroup = new Group();
+    const yLevel = -160;
+
+    // Concentric spatial rings
+    const radii = [140, 280, 440, 640];
+    for (const r of radii) {
+      const points = [];
+      const segments = 48;
+      for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * Math.PI * 2;
+        points.push(new Vector3(Math.cos(theta) * r, yLevel, Math.sin(theta) * r));
+      }
+      const geom = new BufferGeometry().setFromPoints(points);
+      const mat = new LineBasicMaterial({
+        color: 0x38bdf8,
+        opacity: 0.15,
+        transparent: true
+      });
+      gridGroup.add(new Line(geom, mat));
+    }
+
+    // Cross axes
+    const axisX = [new Vector3(-650, yLevel, 0), new Vector3(650, yLevel, 0)];
+    gridGroup.add(new Line(new BufferGeometry().setFromPoints(axisX), new LineBasicMaterial({ color: 0x8b5cf6, opacity: 0.15, transparent: true })));
+
+    const axisZ = [new Vector3(0, yLevel, -650), new Vector3(0, yLevel, 650)];
+    gridGroup.add(new Line(new BufferGeometry().setFromPoints(axisZ), new LineBasicMaterial({ color: 0x8b5cf6, opacity: 0.15, transparent: true })));
+
+    this.scene.add(gridGroup);
   }
 
   loadGraph(graphData) {
@@ -210,7 +259,7 @@ export class Vault3D {
 
       const nodeColorHex = isCircular ? COLOR_CYCLIC_NODE : (TYPE_COLORS[node.type] || TYPE_COLORS.generic);
 
-      const geometry = new SphereGeometry(radius, 16, 12);
+      const geometry = new SphereGeometry(radius, 24, 18);
       const material = new MeshPhongMaterial({
         color: nodeColorHex,
         emissive: isCircular ? 0x991b1b : 0x223355,
@@ -218,6 +267,10 @@ export class Vault3D {
       });
 
       const mesh = new Mesh(geometry, material);
+      if (node.type === 'feature') {
+        const ring = createOrbitRing(radius * 1.6, nodeColorHex);
+        mesh.add(ring);
+      }
       const hasPos = node.position && (node.position.x !== 0 || node.position.y !== 0 || node.position.z !== 0);
       const pos = hasPos
         ? node.position
@@ -288,7 +341,7 @@ export class Vault3D {
     const isCircular = node.status === 'circular' || (node.tags && node.tags.includes('CIRCULAR_DEPENDENCY'));
     const nodeColorHex = isCircular ? COLOR_CYCLIC_NODE : (TYPE_COLORS[node.type] || TYPE_COLORS.generic);
 
-    const geometry = new SphereGeometry(radius, 16, 12);
+    const geometry = new SphereGeometry(radius, 24, 18);
     const material = new MeshPhongMaterial({
       color: nodeColorHex,
       emissive: isCircular ? 0x991b1b : 0x223355,
@@ -296,6 +349,10 @@ export class Vault3D {
     });
 
     const mesh = new Mesh(geometry, material);
+    if (node.type === 'feature') {
+      const ring = createOrbitRing(radius * 1.6, nodeColorHex);
+      mesh.add(ring);
+    }
     const pos = node.position || {
       x: (Math.random() - 0.5) * 120,
       y: (Math.random() - 0.5) * 100,

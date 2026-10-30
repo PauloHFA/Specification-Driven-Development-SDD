@@ -14,7 +14,10 @@
       <div class="toolbar-brand">
         <span class="brand-icon">🔮</span>
         <div class="brand-text">
-          <h1>Cofre 3D</h1>
+          <div class="brand-title-row">
+            <h1>Cofre 3D</h1>
+            <span class="version-tag">SDD PRO</span>
+          </div>
           <span class="brand-subtitle">Spatial Knowledge Graph</span>
         </div>
       </div>
@@ -45,7 +48,11 @@
         </div>
 
         <div class="control-group search-group">
-          <input type="text" id="input-search" placeholder="Buscar nó (ex: US-001, AC...)..." autocomplete="off">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="input-search" placeholder="Buscar nós (ex: US, AC)..." autocomplete="off">
+            <span class="kbd-badge">/</span>
+          </div>
         </div>
       </div>
 
@@ -90,10 +97,13 @@
       </div>
 
       <!-- Stats Bar -->
-      <div id="stats-panel" class="floating-panel">
-        <span id="stat-nodes">0 nós</span> &bull;
-        <span id="stat-edges">0 arestas</span> &bull;
-        <span id="stat-energy">Física Ativa</span>
+      <div id="stats-panel" class="floating-panel stats-telemetry">
+        <span class="telemetry-live-dot"></span>
+        <span id="stat-nodes">0 nós</span>
+        <span class="telemetry-sep">&bull;</span>
+        <span id="stat-edges">0 arestas</span>
+        <span class="telemetry-sep">&bull;</span>
+        <span id="stat-energy" class="energy-metric">Ek: 0.00</span>
       </div>
     </main>
 

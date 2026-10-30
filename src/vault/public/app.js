@@ -188,6 +188,38 @@ class VaultApp {
 
       this.openInspector(nodeData);
     };
+
+    // Global Keyboard Navigation
+    window.addEventListener('keydown', (e) => {
+      // Focus search on '/'
+      if (e.key === '/' && document.activeElement !== this.inputSearch &&
+          document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        this.inputSearch.focus();
+        this.inputSearch.select();
+        return;
+      }
+
+      // Escape key to dismiss modals, connecting mode, or inspector
+      if (e.key === 'Escape') {
+        if (this.isConnectingMode) {
+          this.stopInteractiveConnect();
+          return;
+        }
+        if (this.modalAddNode && !this.modalAddNode.classList.contains('hidden')) {
+          this.closeAddNodeModal();
+          return;
+        }
+        if (this.inspectorHud && !this.inspectorHud.classList.contains('closed')) {
+          this.closeInspector();
+          return;
+        }
+        if (document.activeElement === this.inputSearch) {
+          this.inputSearch.blur();
+          return;
+        }
+      }
+    });
   }
 
   generateNextId(type) {
