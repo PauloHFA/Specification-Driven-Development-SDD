@@ -191,7 +191,9 @@ test('plano (claude): gera md + sh executável com bash válido + html somente l
   assert.match(md, /T-001[\s\S]*T-003/); // mesma faixa (arquivo compartilhado)
 
   const shPath = path.join(dir, 'executar-tarefas.sh');
-  assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  if (process.platform !== 'win32') {
+    assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  }
   const bashN = spawnSync('bash', ['-n', shPath], { encoding: 'utf-8' });
   assert.equal(bashN.status, 0, `bash -n falhou: ${bashN.stderr}`);
   const sh = readFileSync(shPath, 'utf-8');
@@ -279,7 +281,9 @@ test('plano (codex): md + sh com codex exec (bash válido) + html — sem claude
   assert.doesNotMatch(md, /claude -p/);
 
   const shPath = path.join(dir, 'executar-tarefas.sh');
-  assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  if (process.platform !== 'win32') {
+    assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  }
   const bashN = spawnSync('bash', ['-n', shPath], { encoding: 'utf-8' });
   assert.equal(bashN.status, 0, `bash -n falhou: ${bashN.stderr}`);
   const sh = readFileSync(shPath, 'utf-8');
@@ -330,7 +334,9 @@ test('plano (cursor): md + sh com o CLI do Cursor (bash válido) + html — sem 
   assert.doesNotMatch(md, /codex exec/);
 
   const shPath = path.join(dir, 'executar-tarefas.sh');
-  assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  if (process.platform !== 'win32') {
+    assert.ok(statSync(shPath).mode & 0o100, 'script precisa ser executável');
+  }
   const bashN = spawnSync('bash', ['-n', shPath], { encoding: 'utf-8' });
   assert.equal(bashN.status, 0, `bash -n falhou: ${bashN.stderr}`);
   const sh = readFileSync(shPath, 'utf-8');

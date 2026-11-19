@@ -25,6 +25,84 @@ const MATH_DIR = path.resolve(__dirname, 'math');
 const PHYSICS_DIR = path.resolve(__dirname, 'physics');
 const CORE_DIR = path.resolve(__dirname, 'core');
 
+/**
+ * Active Server-Sent Events (SSE) clients for real-time hot-reload.
+ * @type {Set<http.ServerResponse>}
+ */
+const sseClients = new Set();
+
+/**
+ * Broadcasts an SSE event to all connected clients.
+ * @param {string} eventName
+ * @param {Object} data
+ */
+export function broadcastSSE(eventName, data) {
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+/**
+ * Resolves the path to the custom graph persistence file (.spec/vault-custom.json).
+ * @param {string} projectRoot
+ * @param {string} [specDir]
+ * @returns {string}
+ */
+function getCustomGraphFilePath(projectRoot, specDir) {
+  const resolved = resolveSpecDir(specDir, { projectRoot, fallbackToExamples: false }) ||
+                   path.resolve(projectRoot, '.spec');
+  return path.join(resolved, 'vault-custom.json');
+}
+
+/**
+ * Reads persisted custom nodes and edges from disk.
+ * @param {string} projectRoot
+ * @param {string} [specDir]
+ * @returns {{ nodes: Array, edges: Array }}
+ */
+function readCustomGraphData(projectRoot, specDir) {
+  try {
+    const filePath = getCustomGraphFilePath(projectRoot, specDir);
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return {
+        nodes: Array.isArray(parsed.nodes) ? parsed.nodes : [],
+        edges: Array.isArray(parsed.edges) ? parsed.edges : []
+      };
+    }
+  } catch {
+    // Fallback to empty
+  }
+  return { nodes: [], edges: [] };
+}
+
+/**
+ * Writes custom nodes and edges to disk (.spec/vault-custom.json).
+ * @param {string} projectRoot
+ * @param {string} [specDir]
+ * @param {{ nodes: Array, edges: Array }} data
+ */
+function writeCustomGraphData(projectRoot, specDir, data) {
+  const filePath = getCustomGraphFilePath(projectRoot, specDir);
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const clean = {
+    updatedAt: new Date().toISOString(),
+    nodes: Array.isArray(data.nodes) ? data.nodes : [],
+    edges: Array.isArray(data.edges) ? data.edges : []
+  };
+  fs.writeFileSync(filePath, JSON.stringify(clean, null, 2), 'utf-8');
+  return clean;
+}
+
 export const MIME_TYPES = Object.freeze({
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -143,15 +221,10 @@ export function handleVaultRequest(req, res, options = {}) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     });
     res.end();
-    return;
-  }
-
-  if (req.method !== 'GET') {
-    sendJson(res, 405, { error: 'Method Not Allowed' });
     return;
   }
 
@@ -165,6 +238,75 @@ export function handleVaultRequest(req, res, options = {}) {
 
   const pathname = urlObj.pathname;
   const query = Object.fromEntries(urlObj.searchParams.entries());
+
+  // --- API: Custom Graph Persistence (.spec/vault-custom.json) ---
+  if (pathname === '/api/graph/custom') {
+    const targetSpecDir = query.specDir || options.specDir;
+
+    if (req.method === 'GET') {
+      const customData = readCustomGraphData(projectRoot, targetSpecDir);
+      sendJson(res, 200, customData);
+      return;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body || '{}');
+          const saved = writeCustomGraphData(projectRoot, targetSpecDir, parsed);
+          sendJson(res, 200, { status: 'saved', ...saved });
+        } catch (err) {
+          sendJson(res, 400, { error: `Invalid JSON body: ${err.message}` });
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'DELETE') {
+      try {
+        const filePath = getCustomGraphFilePath(projectRoot, targetSpecDir);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        sendJson(res, 200, { status: 'cleared', nodes: [], edges: [] });
+      } catch (err) {
+        sendJson(res, 500, { error: err.message });
+      }
+      return;
+    }
+
+    sendJson(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  // Strictly enforce GET for all other routes
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'Method Not Allowed' });
+    return;
+  }
+
+  // --- API: Server-Sent Events (SSE) for Real-Time .spec/ Hot-Reload ---
+  if (pathname === '/api/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.write(`event: connected\ndata: ${JSON.stringify({ status: 'watching', timestamp: new Date().toISOString() })}\n\n`);
+    sseClients.add(res);
+
+    const cleanup = () => {
+      sseClients.delete(res);
+    };
+    if (typeof req.on === 'function') req.on('close', cleanup);
+    if (typeof res.on === 'function') res.on('close', cleanup);
+    return;
+  }
 
   // --- API: Health ---
   if (pathname === '/api/health') {
@@ -366,10 +508,42 @@ export function createServerInstance(options = {}) {
 export async function startVaultServer(options = {}) {
   const port = options.port ?? 3333;
   const host = options.host || '127.0.0.1';
+  const projectRoot = options.projectRoot || process.cwd();
   const server = createServerInstance(options);
+
+  let specWatcher = null;
+  let debounceTimer = null;
+
+  try {
+    const watchDir = resolveSpecDir(options.specDir, { projectRoot, fallbackToExamples: true });
+    if (watchDir && fs.existsSync(watchDir)) {
+      specWatcher = fs.watch(watchDir, { recursive: true }, (eventType, filename) => {
+        if (!filename) return;
+        const normalized = String(filename).replace(/\\/g, '/');
+        if (normalized.endsWith('.md') || normalized.endsWith('.json')) {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            broadcastSSE('spec-changed', {
+              eventType,
+              filename: normalized,
+              timestamp: new Date().toISOString()
+            });
+          }, 180);
+        }
+      });
+      specWatcher.on('error', () => {
+        // Ignore OS watch errors gracefully
+      });
+    }
+  } catch {
+    // Recursive fs.watch fallback if unsupported by platform
+  }
 
   return new Promise((resolve, reject) => {
     server.on('error', (err) => {
+      if (specWatcher) {
+        try { specWatcher.close(); } catch { /* ignore */ }
+      }
       reject(err);
     });
 
@@ -393,6 +567,15 @@ export async function startVaultServer(options = {}) {
         host,
         close: () =>
           new Promise((res, rej) => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (specWatcher) {
+              try { specWatcher.close(); } catch { /* ignore */ }
+              specWatcher = null;
+            }
+            for (const client of sseClients) {
+              try { client.end(); } catch { /* ignore */ }
+            }
+            sseClients.clear();
             server.close((err) => (err ? rej(err) : res()));
           })
       });

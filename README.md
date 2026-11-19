@@ -1,5 +1,9 @@
 # onp-spec-driven & O Cofre 3D de Documentação (Spatial Knowledge Graph)
 
+[![CI](https://github.com/PauloHFA/Specification-Driven-Development-SDD/actions/workflows/ci.yml/badge.svg)](https://github.com/PauloHFA/Specification-Driven-Development-SDD/actions/workflows/ci.yml)
+
+> Acompanhamento de pendências e backlog em [`PENDENCIAS.md`](PENDENCIAS.md).
+
 **A especificação que continua verdadeira.** Você descreve a feature, o agente
 de IA especifica, planeja, executa em paralelo e **prova** que fez — com
 auditoria mecânica, não com promessa. Se a spec e o código desalinham, a

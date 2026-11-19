@@ -33,6 +33,22 @@ export function parseTap(output) {
     if (/^tests \d+$/.test(title)) continue;
     tests.push({ title, pass: !m[1] && !skip, skip });
   }
+  if (tests.length === 0) {
+    // Fallback para Node >= 22 onde `node --test` sem `--test-reporter=tap` emite `spec`
+    for (const line of String(output).split('\n')) {
+      const cleanLine = line.trimEnd();
+      const m = cleanLine.match(/^\s*([✔✖])\s+(.*)$/);
+      if (!m) continue;
+      let title = m[2].replace(/\s+\(\d+(?:\.\d+)?m?s\)\s*$/, '').trim();
+      let skip = false;
+      const directive = title.match(/^(.*?)\s+#\s*(SKIP|TODO)\b.*$/i);
+      if (directive) {
+        title = directive[1].trim();
+        skip = true;
+      }
+      tests.push({ title, pass: m[1] === '✔' && !skip, skip });
+    }
+  }
   return tests;
 }
 

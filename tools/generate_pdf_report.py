@@ -1,13 +1,21 @@
 import os
 import sys
-from reportlab.lib.pagesizes import A4
+
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, HRFlowable
-)
 from reportlab.pdfgen import canvas
+from reportlab.platypus import (
+    HRFlowable,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
 
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
@@ -63,11 +71,9 @@ def build_pdf(filename="Relatorio_Executivo_Cofre_3D_SDD.pdf"):
     brand_blue = colors.HexColor("#2563EB")
     brand_indigo = colors.HexColor("#4F46E5")
     text_dark = colors.HexColor("#1E293B")
-    text_muted = colors.HexColor("#64748B")
     bg_light = colors.HexColor("#F8FAFC")
     border_color = colors.HexColor("#E2E8F0")
     success_color = colors.HexColor("#10B981")
-    danger_color = colors.HexColor("#EF4444")
 
     title_style = ParagraphStyle(
         'CoverTitle',
@@ -134,7 +140,7 @@ def build_pdf(filename="Relatorio_Executivo_Cofre_3D_SDD.pdf"):
         spaceAfter=3
     )
 
-    callout_style = ParagraphStyle(
+    ParagraphStyle(
         'CalloutText',
         parent=styles['Normal'],
         fontName='Helvetica-Oblique',

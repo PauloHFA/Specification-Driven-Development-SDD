@@ -1,0 +1,57 @@
+name: SDD & Cofre 3D CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-and-audit:
+    name: Node.js Tests, Cofre 3D, SDD Audit & Python Lint
+    runs-on: ubuntu-24.04
+
+    strategy:
+      matrix:
+        node-version: ["20", "24"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Configure Git Identity for E2E Worktree Tests
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI Runner"
+
+      - name: Run Core & E2E Tests (npm test)
+        run: npm test
+
+      - name: Run Cofre 3D Tests
+        run: node --test "test/vault/*.test.js"
+
+      - name: Run Adversarial & Challenger Suites
+        run: |
+          node --test test/remediation-challenger.test.mjs test/remediation-challenger-deep.test.mjs
+          node test/stress-adversarial-sdd.mjs
+
+      - name: Run SDD Self-Audit (--ci)
+        run: node bin/onp-spec.js audit --ci
+
+      - name: Setup Python 3.12 & Ruff Lint
+        if: matrix.node-version == '24'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint Python Tools
+        if: matrix.node-version == '24'
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          ruff check tools/generate_pdf_report.py
