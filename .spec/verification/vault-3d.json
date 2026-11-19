@@ -1,8 +1,8 @@
 {
   "feature": "vault-3d",
-  "timestamp": "2026-11-19T18:56:36.054Z",
-  "gitRev": "c33b5b2",
-  "command": "node --test --test-reporter=tap \"test/vault/*.test.js\"",
+  "timestamp": "2026-11-19T18:58:18.274Z",
+  "gitRev": "a053535",
+  "command": "node --test --test-reporter=tap test/vault/*.test.js",
   "reporter": "tap",
   "exitCode": 0,
   "testsParsed": 205,

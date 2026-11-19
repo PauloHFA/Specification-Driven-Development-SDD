@@ -1,5 +1,5 @@
 {
-  "testCommand": "node --test --test-reporter=tap \"test/vault/*.test.js\"",
+  "testCommand": "node --test --test-reporter=tap test/vault/*.test.js",
   "reporter": "tap",
   "testGlobs": [
     "test/vault/*.test.js"
