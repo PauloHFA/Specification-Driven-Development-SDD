@@ -33,7 +33,7 @@ jobs:
         run: npm test
 
       - name: Run Cofre 3D Tests
-        run: node --test "test/vault/*.test.js"
+        run: node --test test/vault/*.test.js
 
       - name: Run Adversarial & Challenger Suites
         run: |
