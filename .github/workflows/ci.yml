@@ -40,8 +40,10 @@ jobs:
           node --test test/remediation-challenger.test.mjs test/remediation-challenger-deep.test.mjs
           node test/stress-adversarial-sdd.mjs
 
-      - name: Run SDD Self-Audit (--ci)
-        run: node bin/onp-spec.js audit --ci
+      - name: Run SDD Verify & Self-Audit (--ci)
+        run: |
+          node bin/onp-spec.js verify vault-3d
+          node bin/onp-spec.js audit --ci
 
       - name: Setup Python 3.12 & Ruff Lint
         if: matrix.node-version == '24'
